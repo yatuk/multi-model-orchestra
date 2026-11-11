@@ -49,7 +49,7 @@ Needs bash, git, `timeout` and Python 3. Each lane needs its own CLI, signed in:
 On Windows, use Git Bash.
 
 ```bash
-git clone https://github.com/<you>/multi-model-orchestra
+git clone https://github.com/yatuk/multi-model-orchestra
 cd multi-model-orchestra
 ./install.sh --link          # into ~/.claude/skills; --dir PATH for a project
 ~/.claude/skills/orchestra/scripts/mmo-preflight
