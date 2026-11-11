@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# mmo-council: ask several model families the same question in parallel, read-only,
+# and hand back anonymized answers for the orchestrator to judge.
+#
+#   mmo-council --question FILE --outdir DIR [-C DIR] [-t SECONDS]
+#               [--lane provider:model] [--lane provider:model] ...
+#
+# Default panel: codex:gpt-6-astra  kimi:kimi-code/k3.1-pro  deepseek:deepseek/deepseek-v4-pro
+# Writes DIR/answer-A.md, answer-B.md, ... (shuffled, no model names inside),
+# DIR/key.txt (which letter is which model; read it only after judging) and DIR/status.txt.
+# A failed or timed-out lane is reported as failed. It is never counted as agreement.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+Q=""; OUTDIR=""; WD="$PWD"; T=600; LANES=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --question) Q="$2"; shift 2 ;;
+    --outdir) OUTDIR="$2"; shift 2 ;;
+    -C) WD="$2"; shift 2 ;;
+    -t) T="$2"; shift 2 ;;
+    --lane) LANES+=("$2"); shift 2 ;;
+    *) echo "mmo-council: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+[ -s "$Q" ] && [ -n "$OUTDIR" ] || { echo "usage: mmo-council --question FILE --outdir DIR [--lane provider:model ...]" >&2; exit 2; }
+[ ${#LANES[@]} -eq 0 ] && LANES=(codex:gpt-6-astra kimi:kimi-code/k3.1-pro deepseek:deepseek/deepseek-v4-pro)
+mkdir -p "$OUTDIR/.raw"
+
+# Each panelist answers on its own; nobody sees the others.
+pids=()
+for i in "${!LANES[@]}"; do
+  prov="${LANES[$i]%%:*}"; model="${LANES[$i]#*:}"
+  "$HERE/mmo-run" "$prov" -m "$model" -e high --mode ro -C "$WD" -t "$T" \
+    --brief "$Q" --out "$OUTDIR/.raw/$i.md" 2>>"$OUTDIR/.raw/log.txt" &
+  pids+=($!)
+done
+codes=()
+for p in "${pids[@]}"; do wait "$p"; codes+=($?); done
+
+# Shuffle the letters so position does not hint at the model. Seeded by the question
+# file's content, so the same question gives the same mapping (reproducible).
+seed=$(cksum < "$Q" | cut -d' ' -f1)
+letters=(A B C D E F G H)
+order=($(for i in "${!LANES[@]}"; do echo "$(( (i * 7919 + seed) % 104729 )) $i"; done | sort -n | cut -d' ' -f2))
+: > "$OUTDIR/key.txt"; : > "$OUTDIR/status.txt"
+okn=0
+for k in "${!order[@]}"; do
+  i="${order[$k]}"; L="${letters[$k]}"
+  echo "$L = ${LANES[$i]}" >> "$OUTDIR/key.txt"
+  if [ "${codes[$i]}" -eq 0 ]; then
+    tail -n +2 "$OUTDIR/.raw/$i.md" > "$OUTDIR/answer-$L.md"; echo "$L ok" >> "$OUTDIR/status.txt"; okn=$((okn+1))
+  else
+    st=$(head -1 "$OUTDIR/.raw/$i.md" | sed -n 's/.*status=\([a-z]*\).*/\1/p')
+    echo "$L FAILED (${st:-error}) - not an answer, not a vote" >> "$OUTDIR/status.txt"
+  fi
+done
+echo "mmo-council: $okn of ${#LANES[@]} panelists answered; see $OUTDIR/status.txt" >&2
+[ $okn -gt 0 ] || exit 3

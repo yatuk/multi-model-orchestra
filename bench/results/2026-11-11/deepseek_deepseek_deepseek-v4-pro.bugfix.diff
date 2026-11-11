@@ -1,0 +1,31 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..7806a7e 100644
+--- a/durations.py
++++ b/durations.py
+@@ -16,12 +16,25 @@ def parse_duration(text):
+     """
+     total = 0
+     num = ""
++    last_rank = -1
++    saw_unit = False
++    rank = {"h": 0, "m": 1, "s": 2}
+     for ch in text:
+         if ch.isdigit():
+             num += ch
+         elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
++            if not num:
++                raise ValueError(f"unit {ch!r} with no number")
++            if rank[ch] <= last_rank:
++                raise ValueError(f"unit {ch!r} out of order or repeated")
++            total += int(num) * UNITS[ch]
+             num = ""
++            last_rank = rank[ch]
++            saw_unit = True
+         else:
+             raise ValueError(f"bad character {ch!r}")
++    if num:
++        raise ValueError("trailing number with no unit")
++    if not saw_unit:
++        raise ValueError("empty duration")
+     return total

@@ -1,0 +1,52 @@
+--- a/durations.py	2026-11-11 19:39:13.007414400 +0300
++++ b/durations.py	2026-11-11 19:42:22.535546800 +0300
+@@ -1,27 +1,22 @@
+-"""Duration parsing used by the scheduler."""
+-
+-UNITS = {"h": 3600, "m": 60, "s": 1}
+-
+-
+-def parse_duration(text):
+-    """Return the number of seconds in a duration like "1h30m15s".
+-
+-    Rules:
+-    1. Units are h, m and s. Each unit may appear at most once.
+-    2. Units that appear must be in the order h, m, s ("1m1h" is invalid).
+-    3. Every number must be followed by a unit ("90" and "1h30" are invalid).
+-    4. The empty string is invalid.
+-    5. Anything else (spaces, other letters, signs) is invalid.
+-    Invalid input raises ValueError.
+-    """
+-    total = 0
+-    num = ""
+-    for ch in text:
+-        if ch.isdigit():
+-            num += ch
+-        elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
+-            num = ""
+-        else:
+-            raise ValueError(f"bad character {ch!r}")
+-    return total
++"""Duration parsing used by the scheduler."""
++
++UNITS = {"h": 3600, "m": 60, "s": 1}
++
++
++def parse_duration(text):
++    """Return the number of seconds in a duration like "1h30m15s".
++
++    Rules:
++    1. Units are h, m and s. Each unit may appear at most once.
++    2. Units that appear must be in the order h, m, s ("1m1h" is invalid).
++    3. Every number must be followed by a unit ("90" and "1h30" are invalid).
++    4. The empty string is invalid.
++    5. Anything else (spaces, other letters, signs) is invalid.
++    Invalid input raises ValueError.
++    """
++    import re
++
++    m = re.fullmatch(r"(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?", text)
++    if not text or m is None:
++        raise ValueError(f"invalid duration {text!r}")
++    return sum(int(g) * UNITS[u] for g, u in zip(m.groups(), "hms") if g)

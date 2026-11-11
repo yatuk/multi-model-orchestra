@@ -1,0 +1,41 @@
+--- a/durations.py	2026-11-11 19:39:13.007414400 +0300
++++ b/durations.py	2026-11-11 19:42:15.944901300 +0300
+@@ -1,7 +1,15 @@
+ """Duration parsing used by the scheduler."""
+ 
++import re
++
+ UNITS = {"h": 3600, "m": 60, "s": 1}
+ 
++# Units in the required order, each optional and at most once. Every unit is
++# preceded by at least one ASCII digit. fullmatch rejects anything else.
++_DURATION_RE = re.compile(
++    r"(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?"
++)
++
+ 
+ def parse_duration(text):
+     """Return the number of seconds in a duration like "1h30m15s".
+@@ -14,14 +22,13 @@
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not text:
++        raise ValueError("empty duration")
++    match = _DURATION_RE.fullmatch(text)
++    if match is None:
++        raise ValueError(f"invalid duration {text!r}")
+     total = 0
+-    num = ""
+-    for ch in text:
+-        if ch.isdigit():
+-            num += ch
+-        elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
+-            num = ""
+-        else:
+-            raise ValueError(f"bad character {ch!r}")
++    for value, unit in zip(match.groups(), ("h", "m", "s")):
++        if value is not None:
++            total += int(value) * UNITS[unit]
+     return total

@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# mmo-run: run one delegate lane on any model family and leave a checked result file.
+#
+#   mmo-run <provider> --brief FILE --out FILE [-m MODEL] [-e EFFORT] [--mode ro|rw]
+#           [-C DIR] [-t SECONDS] [--allow-main]
+#
+#   provider  codex | kimi | deepseek | claude
+#   --mode    ro (default): the lane may read, never write.
+#             rw: the lane may edit DIR, which must be a linked git worktree
+#                 (git worktree add ...), never your main checkout, unless --allow-main.
+#   -t        hard timeout in seconds (default 900); the lane is killed 10 s after.
+#
+# The out file starts with one header line, then the lane's final answer:
+#   <!-- mmo provider=codex model=gpt-6.1-sol mode=ro status=ok exit=0 seconds=41 -->
+#
+# Exit codes: 0 ok | 2 usage | 3 failed | 4 timeout | 5 empty answer | 6 limit or no credit
+#             7 not signed in (run the CLI once interactively to sign in)
+# A non-zero exit means: do not use the answer. Error text never passes as an answer.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python || true)"
+
+die() { echo "mmo-run: $*" >&2; exit 2; }
+
+[ $# -ge 1 ] || die "usage: mmo-run <codex|kimi|deepseek|claude> --brief FILE --out FILE [-m MODEL] [-e EFFORT] [--mode ro|rw] [-C DIR] [-t SECONDS]"
+PROVIDER="$1"; shift
+MODEL=""; EFFORT=""; MODE="ro"; DIR="$PWD"; TIMEOUT=900; BRIEF=""; OUT=""; ALLOW_MAIN=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m) MODEL="$2"; shift 2 ;;
+    -e) EFFORT="$2"; shift 2 ;;
+    --mode) MODE="$2"; shift 2 ;;
+    -C) DIR="$2"; shift 2 ;;
+    -t) TIMEOUT="$2"; shift 2 ;;
+    --brief) BRIEF="$2"; shift 2 ;;
+    --out) OUT="$2"; shift 2 ;;
+    --allow-main) ALLOW_MAIN=1; shift ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+[ -n "$BRIEF" ] && [ -s "$BRIEF" ] || die "--brief must name a non-empty file"
+[ -n "$OUT" ] || die "--out is required"
+[ -d "$DIR" ] || die "-C $DIR is not a directory"
+case "$MODE" in ro|rw) ;; *) die "--mode must be ro or rw" ;; esac
+[ -n "$PY" ] || die "python3 (or python) is required to read lane output"
+
+# Default model per provider: the cheapest tier that is still a sensible default.
+if [ -z "$MODEL" ]; then
+  case "$PROVIDER" in
+    codex) MODEL="gpt-6.1-sol" ;;
+    kimi) MODEL="kimi-code/k3.1-pro" ;;
+    deepseek) MODEL="deepseek/deepseek-v4-pro" ;;
+    claude) MODEL="sonnet" ;;
+    *) die "unknown provider: $PROVIDER" ;;
+  esac
+fi
+[ "$PROVIDER" = deepseek ] && case "$MODEL" in deepseek/*) ;; *) MODEL="deepseek/$MODEL" ;; esac
+[ -z "$EFFORT" ] && EFFORT="medium"
+
+# Write lanes only in a linked worktree: a lane can never touch your main checkout by accident.
+if [ "$MODE" = rw ] && [ "$ALLOW_MAIN" -eq 0 ]; then
+  gitdir="$(git -C "$DIR" rev-parse --git-dir 2>/dev/null || true)"
+  case "$gitdir" in
+    */worktrees/*) ;;
+    *) die "rw lanes run in a linked git worktree (git worktree add ../wt-x -b lane/x); $DIR is not one. Pass --allow-main to override." ;;
+  esac
+fi
+
+PROMPT="$(cat "$BRIEF")"
+if [ "$MODE" = ro ]; then
+  PROMPT="READ-ONLY LANE: do not create, edit or delete any file, and do not run commands that change state. Answer in your final message.
+
+$PROMPT"
+fi
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+RAW="$TMP/raw"; ERR="$TMP/err"; ANS="$TMP/answer"
+start=$(date +%s); RO_VIOLATION=0
+
+case "$PROVIDER" in
+  codex)
+    command -v codex >/dev/null || die "codex CLI not found"
+    if [ "$MODE" = rw ]; then SANDBOX=(--approve-for-me); else SANDBOX=(-s read-only); fi
+    timeout -k 10 "$TIMEOUT" codex exec --skip-git-repo-check -C "$DIR" -m "$MODEL" \
+      -c model_reasoning_effort="$EFFORT" "${SANDBOX[@]}" -o "$ANS" "$PROMPT" \
+      < /dev/null > "$RAW" 2> "$ERR"
+    code=$?
+    ;;
+  kimi|deepseek)
+    command -v kimi >/dev/null || die "kimi CLI not found"
+    # kimi -p runs tools and edits files without asking, and has no read-only sandbox.
+    # So a read-only lane runs in a throwaway detached worktree (or an empty dir outside git),
+    # and any file it changed there is discarded and reported.
+    RUNDIR="$DIR"
+    if [ "$MODE" = ro ]; then
+      if git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 \
+         && git -C "$DIR" worktree add -q --detach "$TMP/ro-wt" HEAD 2>>"$ERR"; then
+        RUNDIR="$TMP/ro-wt"
+      else
+        RUNDIR="$TMP/ro-empty"; mkdir -p "$RUNDIR"
+      fi
+    fi
+    ( cd "$RUNDIR" && timeout -k 10 "$TIMEOUT" kimi -m "$MODEL" -p "$PROMPT" --output-format stream-json ) \
+      < /dev/null > "$RAW" 2> "$ERR"
+    code=$?
+    if [ "$RUNDIR" = "$TMP/ro-wt" ]; then
+      [ -n "$(git -C "$RUNDIR" status --porcelain 2>/dev/null)" ] && RO_VIOLATION=1
+      git -C "$DIR" worktree remove --force "$RUNDIR" 2>/dev/null
+    elif [ "$RUNDIR" = "$TMP/ro-empty" ] && [ -n "$(ls -A "$RUNDIR")" ]; then
+      RO_VIOLATION=1
+    fi
+    [ $code -eq 0 ] && "$PY" "$HERE/mmo_extract.py" kimi "$RAW" > "$ANS" 2>> "$ERR" || true
+    ;;
+  claude)
+    command -v claude >/dev/null || die "claude CLI not found"
+    if [ "$MODE" = rw ]; then PERM=(--permission-mode acceptEdits); else PERM=(--tools Read Glob Grep --permission-mode dontAsk); fi
+    ( cd "$DIR" && timeout -k 10 "$TIMEOUT" claude -p --model "$MODEL" --output-format json "${PERM[@]}" "$PROMPT" ) \
+      < /dev/null > "$RAW" 2> "$ERR"
+    code=$?
+    # Claude reports failures inside the JSON (is_error); surface its message either way.
+    "$PY" "$HERE/mmo_extract.py" claude "$RAW" > "$ANS" 2>> "$ERR" || { [ $code -eq 0 ] && code=1; }
+    ;;
+  *) die "unknown provider: $PROVIDER" ;;
+esac
+secs=$(( $(date +%s) - start ))
+
+status=ok; rc=0
+if [ $code -eq 124 ] || [ $code -eq 137 ]; then status=timeout; rc=4
+elif [ $code -ne 0 ] && grep -qiE 'insufficient balance|402|quota|usage limit|rate limit|429|exceeded your|does not have access|upgrade to' "$ERR" "$RAW" 2>/dev/null; then status=limit; rc=6
+elif [ $code -ne 0 ] && grep -qiE 'authenticat|not logged in|log in|sign in|unauthorized|401|session expired' "$ERR" "$RAW" 2>/dev/null; then status=auth; rc=7
+elif [ $code -ne 0 ]; then status=failed; rc=3
+elif [ ! -s "$ANS" ] || ! grep -q '[^[:space:]]' "$ANS"; then status=empty; rc=5
+fi
+
+mkdir -p "$(dirname "$OUT")"
+{
+  echo "<!-- mmo provider=$PROVIDER model=$MODEL mode=$MODE status=$status exit=$code seconds=$secs$([ $RO_VIOLATION -eq 1 ] && echo " ro_violation=yes") -->"
+  if [ $rc -eq 0 ]; then cat "$ANS"; [ -n "$(tail -c1 "$ANS")" ] && echo
+  else
+    echo "LANE DID NOT PRODUCE A USABLE ANSWER ($status). Last stderr lines:"
+    tail -n 15 "$ERR" 2>/dev/null
+  fi
+} > "$OUT"
+[ $RO_VIOLATION -eq 1 ] && echo "mmo-run: WARNING read-only lane changed files (discarded)" >&2
+echo "mmo-run: $PROVIDER/$MODEL $MODE -> $status in ${secs}s ($OUT)" >&2
+exit $rc

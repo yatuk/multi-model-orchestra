@@ -1,0 +1,31 @@
+lane	task	score	seconds	detail
+codex:gpt-6.1-sol	bugfix	1.00	79	visible ok, hidden 6/6
+codex:gpt-6.1-sol	reasoning	1.00	12	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+codex:gpt-6.1-sol	bulk	1.00	15	60/60 correct
+codex:gpt-6-astra	bugfix	1.00	45	visible ok, hidden 6/6
+codex:gpt-6-astra	reasoning	1.00	14	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+codex:gpt-6-astra	bulk	1.00	17	60/60 correct
+codex:gpt-6-luna	bugfix	0.00	38	visible tests fail (2/4)
+codex:gpt-6-luna	reasoning	0.67	11	2/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 20, 'q2': 7, 'q3': 401})
+codex:gpt-6-luna	bulk	0.93	13	56/60 correct, wrong lines 27,28,46,56
+kimi:kimi-code/k3.1-pro-highspeed	bugfix	0.00	2	lane failed: plan has no access (status=limit after runner fix)
+kimi:kimi-code/k3.1-pro-highspeed	reasoning	0.00	5	lane failed: plan has no access (status=limit after runner fix)
+kimi:kimi-code/k3.1-pro-highspeed	bulk	0.00	6	lane failed: plan has no access (status=limit after runner fix)
+kimi:kimi-code/k3.1-pro	bugfix	1.00	36	visible ok, hidden 6/6
+kimi:kimi-code/k3.1-pro	reasoning	1.00	11	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+kimi:kimi-code/k3.1-pro	bulk	1.00	16	60/60 correct
+deepseek:deepseek/deepseek-v4-pro	bugfix	1.00	49	visible ok, hidden 6/6
+deepseek:deepseek/deepseek-v4-pro	reasoning	1.00	10	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+deepseek:deepseek/deepseek-v4-pro	bulk	1.00	17	60/60 correct
+deepseek:deepseek/deepseek-flash	bugfix	1.00	14	visible ok, hidden 6/6
+deepseek:deepseek/deepseek-flash	reasoning	1.00	4	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+deepseek:deepseek/deepseek-flash	bulk	1.00	9	60/60 correct
+claude:opus	bugfix	1.00	-	visible ok, hidden 6/6
+claude:opus	reasoning	1.00	-	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+claude:opus	bulk	1.00	-	60/60 correct
+claude:sonnet	bugfix	1.00	-	visible ok, hidden 6/6
+claude:sonnet	reasoning	1.00	-	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+claude:sonnet	bulk	1.00	-	60/60 correct
+claude:haiku	bugfix	1.00	-	visible ok, hidden 6/6
+claude:haiku	reasoning	1.00	-	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+claude:haiku	bulk	1.00	-	60/60 correct
