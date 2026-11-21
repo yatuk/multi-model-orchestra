@@ -15,7 +15,7 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 mkdir -p "$DEST"
-for s in orchestra council chatgpt-lane kimi-lane deepseek-lane; do
+for s in orchestra council chatgpt-lane kimi-lane deepseek-lane otomode; do
   if [ -e "$DEST/$s" ] && [ ! -L "$DEST/$s" ]; then
     echo "skip $s: $DEST/$s already exists (remove it first to replace)"; continue
   fi
@@ -26,3 +26,4 @@ done
 # The lane skills call the runner as ../orchestra/scripts/..., so all skills must sit side by side.
 chmod +x "$DEST/orchestra/scripts/"mmo-* 2>/dev/null || true
 "$DEST/orchestra/scripts/mmo-preflight" || true
+echo "otomode: run 'python $DEST/otomode/scripts/otomode.py install' once to register its hook (uninstall removes it)."

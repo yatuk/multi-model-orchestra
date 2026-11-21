@@ -40,6 +40,7 @@ flowchart LR
 | [`chatgpt-lane`](skills/chatgpt-lane/SKILL.md) | GPT through the Codex CLI: gpt-6.1-sol, gpt-6-astra, gpt-6-luna. |
 | [`kimi-lane`](skills/kimi-lane/SKILL.md) | Kimi through the Kimi Code CLI. |
 | [`deepseek-lane`](skills/deepseek-lane/SKILL.md) | DeepSeek v4-pro and flash through the Kimi Code CLI. |
+| [`otomode`](skills/otomode/SKILL.md) | Unattended runs while you are away: one question round up front, then every prompt is denied and logged, tasks go to lanes, each is checked and committed on its own, and work pauses at 85% plan usage until the reset. |
 
 Claude tiers run as the host agent's own sub-agents (`Agent` tool with an explicit model), so they need no script.
 
@@ -86,6 +87,20 @@ Every lane, whatever the vendor, ends the same way: an output file whose first l
 - **A failed lane is not an answer.** No falling through to "the model said nothing, so it's fine". The council records a failed lane as *not an answer, not a vote*.
 - **No stdin, always a timeout.** Every CLI runs with `</dev/null` under `timeout -k 10`, so nothing hangs on a prompt.
 - **Briefs leave your machine.** The skills say it plainly: never put secrets or personal data in a brief.
+
+## otomode: work while you are away
+
+```
+otomode 6h      ask everything once, write OTOMODE.md, turn the hook on, work
+otomode off     hook off first, short report, then the questions it saved
+```
+
+- **One round of questions, then none.** Tasks, the check for each (a command whose exit code decides), the allow rules the run needs, what is off limits. After that a hook denies every permission prompt and every question for that session and appends it to `QUESTIONS.md`; the agent takes the safe default or marks the task blocked and moves on.
+- **Never delete, deploy or send.** The hook also refuses `rm`, `git push`, branch and worktree removal, `reset --hard`, deploy CLIs, ssh/scp, write requests, `gh pr`/`issue` writes, publish and mail, plus MCP tools named send, post, delete, submit or upload. It is a guard rail, not a sandbox.
+- **Lanes do the work, the conductor checks it.** Each task goes to a sub-agent or an `mmo-run` lane in its own worktree; the main agent runs the task's check itself and commits the task alone on an `otomode/<time>` branch. Three failed tries or a blocker: note why, move on.
+- **Usage aware.** `otomode.py gate` says go or stop before every task; at 85% it stops starting work and schedules a one-shot cron for just after the reset. An hourly watchdog cron restarts a stalled loop. Crons live in the session, so keep it open.
+
+Setup once: `python ~/.claude/skills/otomode/scripts/otomode.py install`. For the gate in the CLI, use `skills/otomode/scripts/statusline.py` as your status line (it saves the plan usage Claude Code passes to it).
 
 ## Benchmark
 
@@ -145,6 +160,7 @@ None of the above covered Kimi or DeepSeek through their coding CLIs when this w
 skills/
   orchestra/   SKILL.md, scripts/ (mmo-run, mmo-council, mmo-preflight, mmo_extract.py), templates/
   council/     chatgpt-lane/  kimi-lane/  deepseek-lane/
+  otomode/     SKILL.md, scripts/ (otomode.py: switch, hook, usage gate; statusline.py)
 bench/         run.sh, grade.py, tasks/, results/
 ```
 
