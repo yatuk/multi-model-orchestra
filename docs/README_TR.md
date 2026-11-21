@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/logo.png" width="160" height="160" alt="multi-model-orchestra logosu: model şeritleri üzerinde bir şef çubuğu">
+  <img src="assets/logo.png" width="160" height="160" alt="multi-model-orchestra logosu: kırmızı papyonlu, baget kaldıran çizgi film şef">
 </p>
 
 <h1 align="center">multi-model-orchestra</h1>
 
-<p align="center"><sub><a href="../README.md">English</a> · Türkçe · <a href="README_UK.md">Українська</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_ZH-TW.md">繁體中文</a> · <a href="README_DE.md">Deutsch</a> · <a href="README_FR.md">Français</a> · <a href="README_ES.md">Español</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_AZ.md">Azərbaycanca</a> · <a href="README_UZ.md">Oʻzbekcha</a> · <a href="README_KK.md">Қазақша</a> · <a href="README_KY.md">Кыргызча</a> · <a href="README_TK.md">Türkmençe</a> · <a href="README_TT.md">Татарча</a> · <a href="README_UG.md">ئۇيغۇرچە</a> · <a href="README_PT.md">Português</a> · <a href="README_VI.md">Tiếng Việt</a></sub></p>
+<p align="center"><sub><a href="../README.md">English</a> · Türkçe · <a href="README_UK.md">Українська</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_ZH-TW.md">繁體中文</a> · <a href="README_DE.md">Deutsch</a> · <a href="README_FR.md">Français</a> · <a href="README_ES.md">Español</a> · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_AZ.md">Azərbaycanca</a> · <a href="README_UZ.md">Oʻzbekcha</a> · <a href="README_KK.md">Қазақша</a> · <a href="README_KY.md">Кыргызча</a> · <a href="README_TK.md">Türkmençe</a> · <a href="README_CRH.md">Qırımtatarca</a> · <a href="README_UG.md">ئۇيغۇرچە</a> · <a href="README_PT.md">Português</a> · <a href="README_VI.md">Tiếng Việt</a></sub></p>
 
 <p align="center"><b>Pahalı model şeflik etsin, ucuz modeller çalsın, her cevap kullanılmadan önce kontrol edilsin.</b><br>
 Claude Code (ya da <code>SKILL.md</code> dosyalarını okuyan herhangi bir ajan) için, işi Claude Opus, Sonnet ve Haiku'ya, OpenAI GPT'ye, Kimi'ye ve DeepSeek'e devreden skill'ler.<br>
