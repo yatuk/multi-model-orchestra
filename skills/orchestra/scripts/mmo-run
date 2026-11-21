@@ -15,6 +15,7 @@
 #
 # Exit codes: 0 ok | 2 usage | 3 failed | 4 timeout | 5 empty answer | 6 limit or no credit
 #             7 not signed in (run the CLI once interactively to sign in)
+#             8 model rejected (unknown or unsupported model id: switch id, do not wait)
 # A non-zero exit means: do not use the answer. Error text never passes as an answer.
 set -uo pipefail
 
@@ -129,9 +130,13 @@ secs=$(( $(date +%s) - start ))
 
 status=ok; rc=0
 if [ $code -eq 124 ] || [ $code -eq 137 ]; then status=timeout; rc=4
-elif [ $code -ne 0 ] && grep -qiE 'insufficient balance|402|quota|usage limit|rate limit|429|exceeded your|does not have access|upgrade to' "$ERR" "$RAW" 2>/dev/null; then status=limit; rc=6
-elif [ $code -ne 0 ] && grep -qiE 'authenticat|not logged in|log in|sign in|unauthorized|401|session expired' "$ERR" "$RAW" 2>/dev/null; then status=auth; rc=7
-elif [ $code -ne 0 ]; then status=failed; rc=3
+elif [ $code -ne 0 ]; then
+  # Match only the CLI's own error lines, never the brief echoed into stderr.
+  printf '%s' "$PROMPT" > "$TMP/prompt"
+  status="$("$PY" "$HERE/mmo_classify.py" "$PROVIDER" "$TMP/prompt" "$ERR" "$RAW" 2>/dev/null || echo failed)"
+  case "$status" in
+    model) rc=8 ;; limit) rc=6 ;; auth) rc=7 ;; *) status=failed; rc=3 ;;
+  esac
 elif [ ! -s "$ANS" ] || ! grep -q '[^[:space:]]' "$ANS"; then status=empty; rc=5
 fi
 
