@@ -23,7 +23,7 @@ and the differences are where the useful information is.
 
 3. Read `council/answer-A.md`, `answer-B.md`, ... **before** opening `key.txt`. The letters are shuffled,
    so you judge the reasoning and not the brand.
-4. Check `status.txt`. A lane marked FAILED is not an answer and not a vote. If fewer than two lanes answered,
+4. Check `status.txt`. A lane marked FAILED (including `model`, a rejected model id) is not an answer and not a vote. If fewer than two lanes answered,
    say so and do not call it a council.
 
 ## Judge it

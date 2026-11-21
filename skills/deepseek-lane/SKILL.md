@@ -27,5 +27,5 @@ git worktree add ../wt-<task> -b lane/<task>
 
 ## Failures
 
-DeepSeek is prepaid. An empty balance shows up as HTTP 402 and the runner reports `status=limit` (exit 6).
+DeepSeek is prepaid. An empty balance shows up as HTTP 402 and the runner reports `status=limit` (exit 6). A rejected model id is `status=model` (exit 8): pick another id, do not wait.
 Tell the user, route the job to the fallback lane, and do not retry in a loop.

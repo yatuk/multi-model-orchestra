@@ -31,7 +31,7 @@ git worktree add ../wt-<task> -b lane/<task>
 
 Follow the gates in the orchestra skill: status `ok`, re-run the check yourself, read the full diff
 (`git -C ../wt-<task> diff`), then merge and remove the worktree. On `limit`, move the job to the
-kimi-lane or deepseek-lane; on `auth`, ask the user to run `codex login`.
+kimi-lane or deepseek-lane; on `auth`, ask the user to run `codex login`; on `model` (exit 8, id rejected for this account) switch the model id, do not wait.
 
 ## Images
 
