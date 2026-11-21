@@ -3,6 +3,7 @@
   python otomode.py on --project DIR --hours N [--session ID]
   python otomode.py off
   python otomode.py status
+  python otomode.py log "<text>" [--project DIR]   (timestamped line in the OTOMODE.md log)
   python otomode.py gate [--percent P --reset ISO]
   python otomode.py usage
   python otomode.py install | uninstall   (register the hook in ~/.claude/settings.json)
@@ -31,37 +32,16 @@ import re  # noqa: E402
 import time  # noqa: E402
 from datetime import datetime  # noqa: E402
 
-# Commands otomode never runs: delete, deploy, send. Checked on Bash/PowerShell.
-# C = the word is in command position (start, after ; & | ( or sudo), so
-# `grep mail` or `cat deploy.md` stay allowed.
-C = r"(^|[;&|(]\s*|\bsudo\s+|\bxargs\s+)"
-BLOCKED_COMMANDS = [
-    (C + r"rm\s", "delete (rm)"),
-    (r"\bgit\s+rm\s", "delete (git rm)"),
-    (C + r"(rmdir|del|erase|shred|unlink|rd)\s", "delete"),
-    (r"\b(Remove-Item|Clear-Content)\b", "delete (Remove-Item)"),
-    (r"git\s+(push|send-email)\b", "git push"),
-    (r"git\s+branch\s+.*-[dD]\b", "delete branch"),
-    (r"git\s+(clean|worktree\s+remove|worktree\s+prune|stash\s+(drop|clear))\b", "delete (git)"),
-    (r"git\s+reset\s+--hard", "git reset --hard"),
-    (r"git\s+checkout\s+--\s", "discard changes"),
-    (r"git\s+restore\b(?!.*--staged)", "discard changes"),
-    (r"git\s+tag\s+.*-d\b", "delete tag"),
-    (r"\bgh\s+(pr\s+(create|merge|comment|close|review)|issue\s+(create|comment|close)|release|repo\s+delete|api\b)", "GitHub write"),
-    (C + r"(kubectl|helm|terraform|ansible-playbook|pulumi|vercel|netlify|flyctl|fly|az|aws|gcloud)\s", "deploy"),
-    (r"docker\s+(push|compose\s+up|run|rm|rmi|system\s+prune|volume\s+rm)", "docker deploy/delete"),
-    (r"\b(npm|pnpm|yarn)\s+publish\b|\bcargo\s+publish\b|\btwine\s+upload\b", "publish"),
-    (C + r"(scp|rsync|ssh|sftp)\s", "remote host"),
-    (r"\b(curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b.*(-X\s*(POST|PUT|DELETE|PATCH)|--data|-d\s|-F\s|-Method\s+(Post|Put|Delete|Patch))", "outbound write request"),
-    (C + r"(sendmail|mail|mutt)\s|\bSend-MailMessage\b", "send mail"),
-    (C + r"shutdown\s|\b(Restart-Computer|Stop-Computer)\b", "machine control"),
-]
+# Commands otomode never runs (delete, deploy, push, send) are judged in
+# cmdscan.py: a Bash line is parsed and only the commands that would run are
+# checked (not text inside heredocs, quotes or commit messages); PowerShell
+# uses whole-text regex rules.
 
 # MCP tools whose name says they send, post, delete or deploy.
 BLOCKED_TOOL_WORDS = re.compile(
     r"(^|_|-)(send|post|reply|publish|delete|remove|trash|deploy|create_event|update_event|"
     r"respond_to_event|submit|merge|set_auto_merge|move_to_cloud|stop_session|renew|reserve|"
-    r"push|upload|file_upload|form_input)(_|-|$)",
+    r"save_registration|kaydet|not_doldur|push|upload|file_upload|form_input)(_|-|$)",
     re.I,
 )
 # Tools that only ask the user something.
@@ -119,11 +99,11 @@ def describe_ask(tool_input):
 
 def blocked_reason(tool, tool_input):
     if tool in ("Bash", "PowerShell"):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import cmdscan  # next to this script; only loaded while otomode is on
         cmd = str(tool_input.get("command", ""))
-        for pattern, label in BLOCKED_COMMANDS:
-            if re.search(pattern, cmd, re.I):
-                return label
-    elif tool.startswith("mcp__") and BLOCKED_TOOL_WORDS.search(tool.split("__")[-1]):
+        return cmdscan.bash_reason(cmd) if tool == "Bash" else cmdscan.powershell_reason(cmd)
+    if tool.startswith("mcp__") and BLOCKED_TOOL_WORDS.search(tool.split("__")[-1]):
         return "sends, deletes or deploys"
     return None
 
@@ -162,6 +142,10 @@ def hook():
         return
     label = blocked_reason(tool, tool_input)
     if label:
+        if tool in ("Bash", "PowerShell"):  # listed as "cleanup left for you" at the end
+            state.setdefault("blocked", []).append(
+                {"time": now(), "tool": tool, "why": label, "command": short(tool_input.get("command", ""), 400)})
+            del state["blocked"][:-50]
         log_question(state, f"blocked ({label})", tool, "```\n" + short(tool_input) + "\n```")
         emit(name, f"Blocked by otomode rule: never {label}.{tail}")
         return
@@ -284,11 +268,46 @@ def install(remove=False):
     print(("removed from " if remove else "installed in ") + path + " (previous copy: settings.json.bak)")
 
 
+def log_line(text, project=None):
+    """Append `- HH:MM text` to the Log section of OTOMODE.md; the time comes from the clock."""
+    state = load_state() or {}
+    project = project or state.get("project") or os.getcwd()
+    path = os.path.join(project, "OTOMODE.md")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        lines = ["# Otomode run"]
+    entry = f"- {datetime.now().strftime('%H:%M')} {' '.join(text.split())}"
+    head = next((k for k, x in enumerate(lines) if x.strip().lower() == "## log"), None)
+    if head is None:
+        lines += ["", "## Log", entry]
+    else:
+        k = head + 1
+        while k < len(lines) and not lines[k].startswith("## "):
+            k += 1
+        while k > head + 1 and not lines[k - 1].strip():
+            k -= 1
+        lines.insert(k, entry)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    return entry
+
+
 def main():
     args = sys.argv[1:]
     cmd = args[0] if args else "status"
     if cmd == "hook":
         hook()
+    elif cmd == "log":
+        rest, project = args[1:], None
+        if "--project" in rest:
+            k = rest.index("--project")
+            project = rest[k + 1] if k + 1 < len(rest) else None
+            rest = rest[:k] + rest[k + 2:]
+        if not rest:
+            sys.exit('usage: otomode.py log "<text>" [--project DIR]')
+        print(log_line(" ".join(rest), project))
     elif cmd in ("install", "uninstall"):
         install(remove=cmd == "uninstall")
     elif cmd == "gate":
@@ -307,7 +326,8 @@ def main():
         state = load_state()
         if os.path.exists(STATE_FILE):
             os.replace(STATE_FILE, os.path.join(STATE_DIR, "last-run.json"))
-        print(json.dumps({"off": True, "was": state}, indent=2))
+        cleanup = [b["command"] for b in (state or {}).get("blocked", [])]
+        print(json.dumps({"off": True, "cleanup_left_for_you": cleanup, "was": state}, indent=2))
     elif cmd == "status":
         state = load_state()
         print(json.dumps({"on": bool(state), "state": state, "usage": read_usage()}, indent=2))
