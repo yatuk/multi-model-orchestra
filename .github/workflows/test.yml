@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+    paths:
+      - "skills/**"
+      - "bench/**"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "bench/**"
+      - ".github/workflows/test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: otomode tests
+        run: python -m pytest skills/otomode/scripts -q
+      - name: Classifier tests
+        run: bash skills/orchestra/scripts/test-mmo-classify.sh
+      - name: Shell syntax
+        run: |
+          for f in skills/orchestra/scripts/mmo-run skills/orchestra/scripts/mmo-council \
+                   skills/orchestra/scripts/mmo-preflight skills/orchestra/scripts/test-mmo-classify.sh \
+                   bench/run.sh install.sh; do
+            bash -n "$f" && echo "ok $f"
+          done

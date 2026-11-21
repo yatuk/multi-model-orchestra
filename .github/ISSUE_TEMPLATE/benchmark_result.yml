@@ -1,0 +1,45 @@
+name: Benchmark result
+description: Share a bench/run.sh result from your machine.
+labels: ["benchmark"]
+body:
+  - type: input
+    id: lanes
+    attributes:
+      label: Lanes
+      description: "The lanes you ran, for example `codex:gpt-6.1-sol:medium kimi:kimi-code/k3.1-pro`."
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: results.tsv
+      description: Paste the contents of `bench/results/<date>/results.tsv`.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: machine
+    attributes:
+      label: Machine and OS
+      placeholder: "Windows 11 Git Bash, 16 GB RAM"
+    validations:
+      required: true
+  - type: input
+    id: date
+    attributes:
+      label: Date of the run
+      placeholder: "2026-11-21"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Failed lanes, odd statuses, CLI versions, anything that explains a surprising cell.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed secrets, personal data and private code from everything I pasted.
+          required: true
