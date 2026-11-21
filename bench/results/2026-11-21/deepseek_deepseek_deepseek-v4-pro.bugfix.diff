@@ -1,0 +1,40 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..263b3b9 100644
+--- a/durations.py
++++ b/durations.py
+@@ -1,6 +1,7 @@
+ """Duration parsing used by the scheduler."""
+ 
+ UNITS = {"h": 3600, "m": 60, "s": 1}
++UNIT_ORDER = "hms"
+ 
+ 
+ def parse_duration(text):
+@@ -14,14 +15,26 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not text:
++        raise ValueError("empty duration")
++
+     total = 0
+     num = ""
++    last_order = -1
+     for ch in text:
+         if ch.isdigit():
+             num += ch
+         elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
++            if not num:
++                raise ValueError(f"missing number before unit {ch!r}")
++            order = UNIT_ORDER.index(ch)
++            if order <= last_order:
++                raise ValueError(f"unit {ch!r} out of order or repeated")
++            total += int(num) * UNITS[ch]
+             num = ""
++            last_order = order
+         else:
+             raise ValueError(f"bad character {ch!r}")
++    if num:
++        raise ValueError("trailing number without a unit")
+     return total
