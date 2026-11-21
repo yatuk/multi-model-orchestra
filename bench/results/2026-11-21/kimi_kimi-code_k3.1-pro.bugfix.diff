@@ -1,0 +1,35 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..f1f425a 100644
+--- a/durations.py
++++ b/durations.py
+@@ -14,14 +14,28 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not isinstance(text, str):
++        raise ValueError("duration must be a string")
++
+     total = 0
+     num = ""
++    last_unit = -1
++    seen_unit = False
+     for ch in text:
+-        if ch.isdigit():
++        if "0" <= ch <= "9":
+             num += ch
+         elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
++            if not num:
++                raise ValueError("unit must follow a number")
++            unit = "hms".index(ch)
++            if unit <= last_unit:
++                raise ValueError("units must be unique and ordered")
++            total += int(num) * UNITS[ch]
+             num = ""
++            last_unit = unit
++            seen_unit = True
+         else:
+             raise ValueError(f"bad character {ch!r}")
++    if num or not seen_unit:
++        raise ValueError("duration must end with a unit")
+     return total
