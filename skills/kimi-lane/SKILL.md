@@ -32,7 +32,7 @@ and a short list of things it must not do. Give it one job per run.
 
 ## After it finishes
 
-Same gates as every lane: status `ok`, re-run the check, read the diff, merge. On `limit` move to the
+Same gates as every lane: status `ok`, re-run the check, read the diff, merge. On `model` (exit 8) pick another model id from the table. On `limit` move to the
 chatgpt-lane or deepseek-lane. On `auth` ask the user to log in to Kimi Code again.
 
 ## Read-only lanes

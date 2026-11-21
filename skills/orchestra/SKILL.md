@@ -63,8 +63,8 @@ scripts/mmo-run deepseek -m deepseek/deepseek-v4-pro --mode ro --brief q.md --ou
 - `--mode ro` for anything that only reads. `--mode rw` refuses to run outside a linked git worktree,
   so a writing lane never edits your main checkout. Make one worktree per writing lane.
 - Every run has a timeout, no stdin, and an output file whose first line is a status header:
-  `<!-- mmo provider=… model=… mode=… status=ok|failed|timeout|empty|limit|auth exit=… seconds=… -->`
-- Exit codes: 0 ok, 2 usage, 3 failed, 4 timeout, 5 empty, 6 limit/balance, 7 auth.
+  `<!-- mmo provider=… model=… mode=… status=ok|failed|timeout|empty|limit|auth|model exit=… seconds=… -->`
+- Exit codes: 0 ok, 2 usage, 3 failed, 4 timeout, 5 empty, 6 limit/balance, 7 auth, 8 model (id rejected).
 - Run independent lanes in parallel. Wait for all of them before you judge any.
 
 ## 5. Gates before you use an answer
@@ -79,6 +79,7 @@ scripts/mmo-run deepseek -m deepseek/deepseek-v4-pro --mode ro --brief q.md --ou
 ## 6. When a lane fails
 
 - `limit` (quota, balance, 429): switch to the fallback column. Do not retry the same lane in a loop.
+- `model` (unknown or unsupported model id, e.g. model_not_found): switch to a model id the CLI accepts, or the fallback lane. Waiting for a reset will not help.
 - `auth`: tell the user which CLI needs a fresh login. Do not try to log in for them.
 - `timeout` or `empty`: shrink the brief or split the job, then retry once.
 - Same lane fails twice on the same check: move one step up the table, with the failure output in the new brief.
