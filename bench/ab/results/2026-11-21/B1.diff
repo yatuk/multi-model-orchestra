@@ -1,0 +1,468 @@
+diff --git a/cache.py b/cache.py
+index f2606f9..b92461d 100644
+--- a/cache.py
++++ b/cache.py
+@@ -1,29 +1,59 @@
+-"""A small LRU cache."""
++"""A small LRU cache with optional per-entry expiry."""
++import time
+ from collections import OrderedDict
+ 
+ 
+ class LRUCache:
+-    def __init__(self, capacity):
++    def __init__(self, capacity, ttl=None, clock=None):
+         if capacity < 1:
+             raise ValueError("capacity must be at least 1")
++        if ttl is not None and not ttl > 0:
++            raise ValueError("ttl must be greater than 0")
+         self.capacity = capacity
+-        self._data = OrderedDict()
++        self.ttl = ttl
++        self.clock = clock if clock is not None else time.monotonic
++        self._data = OrderedDict()  # key -> (value, stamp)
++
++    def _expired(self, stamp, now):
++        return now - stamp >= self.ttl
++
++    def _purge(self):
++        if self.ttl is None:
++            return
++        now = self.clock()
++        dead = [k for k, (_, s) in self._data.items() if self._expired(s, now)]
++        for k in dead:
++            del self._data[k]
++
++    def _live(self, key):
++        """Return the stored entry for key if live, else None (dropping it if expired)."""
++        entry = self._data.get(key)
++        if entry is None:
++            return None
++        if self.ttl is not None and self._expired(entry[1], self.clock()):
++            del self._data[key]
++            return None
++        return entry
+ 
+     def get(self, key, default=None):
+-        if key not in self._data:
++        entry = self._live(key)
++        if entry is None:
+             return default
+         self._data.move_to_end(key)
+-        return self._data[key]
++        return entry[0]
+ 
+     def put(self, key, value):
++        self._purge()
++        stamp = self.clock() if self.ttl is not None else None
+         if key in self._data:
+             self._data.move_to_end(key)
+-        self._data[key] = value
++        self._data[key] = (value, stamp)
+         if len(self._data) > self.capacity:
+             self._data.popitem(last=False)
+ 
+     def __len__(self):
++        self._purge()
+         return len(self._data)
+ 
+     def __contains__(self, key):
+-        return key in self._data
++        return self._live(key) is not None
+diff --git a/intervals.py b/intervals.py
+index 1d47c38..502a840 100644
+--- a/intervals.py
++++ b/intervals.py
+@@ -14,11 +14,16 @@ def merge(intervals):
+     6. start > end raises ValueError naming the bad interval.
+     7. The input list is not modified. The result is a new list of tuples.
+     """
++    items = []
++    for item in intervals:
++        start, end = item
++        if start > end:
++            raise ValueError(f"invalid interval: {(start, end)!r}")
++        items.append((start, end))
+     out = []
+-    intervals.sort()
+-    for start, end in intervals:
+-        if out and start < out[-1][1]:
+-            out[-1] = (out[-1][0], end)
++    for start, end in sorted(items):
++        if out and start <= out[-1][1]:
++            out[-1] = (out[-1][0], max(out[-1][1], end))
+         else:
+             out.append((start, end))
+     return out
+diff --git a/query.py b/query.py
+index 6c0fb9b..6219595 100644
+--- a/query.py
++++ b/query.py
+@@ -7,9 +7,238 @@ class ParseError(ValueError):
+         self.pos = pos
+ 
+ 
++_KEYWORDS = {"and", "or", "not", "true", "false", "null"}
++_IDSTART = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_"
++_IDCHARS = _IDSTART + "0123456789"
++_DIGITS = "0123456789"
++
++
++def _tokenize(text):
++    """Return a list of (kind, value, pos). A tokenizer failure is stored as
++    an ("error", ParseError, pos) token so the parser reports whichever
++    problem comes first."""
++    toks = []
++    n = len(text)
++    i = 0
++    while i < n:
++        c = text[i]
++        if c in " \t\r\n\f\v":
++            i += 1
++        elif c == "(":
++            toks.append(("lparen", c, i))
++            i += 1
++        elif c == ")":
++            toks.append(("rparen", c, i))
++            i += 1
++        elif c in _IDSTART:
++            start = i
++            while True:
++                j = i + 1
++                while j < n and text[j] in _IDCHARS:
++                    j += 1
++                i = j
++                if i + 1 < n and text[i] == "." and text[i + 1] in _IDSTART:
++                    i += 1
++                    continue
++                break
++            toks.append(("ident", text[start:i], start))
++        elif c in "<>!=":
++            if text.startswith(("<=", ">=", "!="), i):
++                toks.append(("op", text[i:i + 2], i))
++                i += 2
++            elif c == "!":
++                toks.append(("error", ParseError("unexpected '!'", i), i))
++                return toks
++            else:
++                toks.append(("op", c, i))
++                i += 1
++        elif c == "-" or c in _DIGITS:
++            start = i
++            if c == "-":
++                i += 1
++                if i >= n or text[i] not in _DIGITS:
++                    toks.append(("error", ParseError("'-' must be followed by a digit", start), start))
++                    return toks
++            while i < n and text[i] in _DIGITS:
++                i += 1
++            toks.append(("int", int(text[start:i]), start))
++        elif c == '"':
++            start = i
++            i += 1
++            buf = []
++            while True:
++                if i >= n:
++                    toks.append(("error", ParseError("unterminated string", start), start))
++                    return toks
++                ch = text[i]
++                if ch == '"':
++                    i += 1
++                    break
++                if ch == "\\":
++                    if i + 1 < n and text[i + 1] in '"\\':
++                        buf.append(text[i + 1])
++                        i += 2
++                        continue
++                    toks.append(("error", ParseError("invalid escape in string", start), start))
++                    return toks
++                buf.append(ch)
++                i += 1
++            toks.append(("str", "".join(buf), start))
++        else:
++            toks.append(("error", ParseError(f"unexpected character {c!r}", i), i))
++            return toks
++    toks.append(("eof", None, n))
++    return toks
++
++
++class _Parser:
++    def __init__(self, text):
++        self.text = text
++        self.toks = _tokenize(text)
++        self.i = 0
++
++    def peek(self):
++        tok = self.toks[self.i]
++        if tok[0] == "error":
++            raise tok[1]
++        return tok
++
++    def next(self):
++        tok = self.peek()
++        self.i += 1
++        return tok
++
++    def fail(self, tok, what):
++        if tok[0] == "eof":
++            raise ParseError(f"unexpected end of input, expected {what}", len(self.text))
++        raise ParseError(f"unexpected token, expected {what}", tok[2])
++
++    def is_kw(self, tok, word):
++        return tok[0] == "ident" and tok[1].lower() == word
++
++    def expr(self):
++        left = self.and_expr()
++        while self.is_kw(self.peek(), "or"):
++            self.next()
++            left = ("or", left, self.and_expr())
++        return left
++
++    def and_expr(self):
++        left = self.not_expr()
++        while self.is_kw(self.peek(), "and"):
++            self.next()
++            left = ("and", left, self.not_expr())
++        return left
++
++    def not_expr(self):
++        if self.is_kw(self.peek(), "not"):
++            self.next()
++            return ("not", self.not_expr())
++        return self.primary()
++
++    def primary(self):
++        tok = self.peek()
++        if tok[0] == "lparen":
++            self.next()
++            node = self.expr()
++            close = self.peek()
++            if close[0] != "rparen":
++                self.fail(close, "')'")
++            self.next()
++            return node
++        if tok[0] == "ident" and tok[1].lower() not in _KEYWORDS:
++            self.next()
++            op = self.peek()
++            if op[0] != "op":
++                self.fail(op, "operator")
++            self.next()
++            val = self.peek()
++            if val[0] in ("int", "str"):
++                self.next()
++                return ("cmp", tok[1], op[1], val[1])
++            if val[0] == "ident":
++                low = val[1].lower()
++                if low in ("true", "false", "null"):
++                    self.next()
++                    return ("cmp", tok[1], op[1], {"true": True, "false": False, "null": None}[low])
++            self.fail(val, "value")
++        self.fail(tok, "field or '('")
++
++    def parse(self):
++        node = self.expr()
++        tok = self.peek()
++        if tok[0] != "eof":
++            self.fail(tok, "end of input")
++        return node
++
++
+ def parse(text):
+-    raise NotImplementedError
++    return _Parser(text).parse()
++
++
++_MISSING = object()
++
++
++def _lookup(record, field):
++    cur = record
++    for part in field.split("."):
++        if not isinstance(cur, dict) or part not in cur:
++            return _MISSING
++        cur = cur[part]
++    return cur
++
++
++def _compare(a, op, b):
++    if op == "=":
++        return a == b
++    if op == "!=":
++        return a != b
++    if op == "<":
++        return a < b
++    if op == "<=":
++        return a <= b
++    if op == ">":
++        return a > b
++    return a >= b
++
++
++def _cmp(record, field, op, value):
++    actual = _lookup(record, field)
++    if actual is _MISSING:
++        return False
++    if value is None:
++        if op == "=":
++            return actual is None
++        if op == "!=":
++            return actual is not None
++        return False
++    if isinstance(value, bool):
++        if isinstance(actual, bool):
++            return op in ("=", "!=") and _compare(actual, op, value)
++        return False
++    if isinstance(actual, bool):
++        return False
++    if isinstance(value, int):
++        if isinstance(actual, (int, float)):
++            return _compare(actual, op, value)
++        return False
++    if isinstance(value, str):
++        if isinstance(actual, str):
++            return _compare(actual, op, value)
++        return False
++    return False
++
++
++def _eval(node, record):
++    kind = node[0]
++    if kind == "cmp":
++        return _cmp(record, node[1], node[2], node[3])
++    if kind == "not":
++        return not _eval(node[1], record)
++    if kind == "and":
++        return _eval(node[1], record) and _eval(node[2], record)
++    return _eval(node[1], record) or _eval(node[2], record)
+ 
+ 
+ def matches(text, record):
+-    raise NotImplementedError
++    return _eval(parse(text), record)
+diff --git a/report.py b/report.py
+index 7a30f4e..24cfb23 100644
+--- a/report.py
++++ b/report.py
+@@ -1,46 +1,36 @@
+-"""Order report. Works, but is one long function."""
++"""Order report."""
+ 
+ 
+-def summarize(orders):
+-    # orders: list of dicts with keys customer, amount (cents, int), status
+-    lines = []
++def group_totals(orders):
++    """Return {customer: (net_cents, order_count)}, skipping cancelled orders."""
+     totals = {}
+-    counts = {}
+     for o in orders:
+         if o["status"] == "cancelled":
+             continue
+-        if o["status"] == "refunded":
+-            if o["customer"] in totals:
+-                totals[o["customer"]] = totals[o["customer"]] - o["amount"]
+-            else:
+-                totals[o["customer"]] = 0 - o["amount"]
+-            if o["customer"] in counts:
+-                counts[o["customer"]] = counts[o["customer"]] + 1
+-            else:
+-                counts[o["customer"]] = 1
+-            continue
+-        if o["customer"] in totals:
+-            totals[o["customer"]] = totals[o["customer"]] + o["amount"]
+-        else:
+-            totals[o["customer"]] = o["amount"]
+-        if o["customer"] in counts:
+-            counts[o["customer"]] = counts[o["customer"]] + 1
+-        else:
+-            counts[o["customer"]] = 1
+-    names = list(totals.keys())
+-    for i in range(len(names)):
+-        for j in range(len(names) - 1 - i):
+-            a, b = names[j], names[j + 1]
+-            if totals[a] < totals[b] or (totals[a] == totals[b] and a > b):
+-                names[j], names[j + 1] = names[j + 1], names[j]
+-    grand = 0
+-    for n in names:
+-        t = totals[n]
+-        grand = grand + t
+-        sign = "-" if t < 0 else ""
+-        t = abs(t)
+-        lines.append(n + ": " + sign + str(t // 100) + "." + str(t % 100).zfill(2) + " (" + str(counts[n]) + " orders)")
+-    sign = "-" if grand < 0 else ""
+-    g = abs(grand)
+-    lines.append("TOTAL: " + sign + str(g // 100) + "." + str(g % 100).zfill(2))
++        amount = -o["amount"] if o["status"] == "refunded" else o["amount"]
++        net, count = totals.get(o["customer"], (0, 0))
++        totals[o["customer"]] = (net + amount, count + 1)
++    return totals
++
++
++def rank(totals):
++    """Customer names by net total descending, ties by name ascending."""
++    return sorted(totals, key=lambda n: (-totals[n][0], n))
++
++
++def format_cents(cents):
++    sign = "-" if cents < 0 else ""
++    c = abs(cents)
++    return sign + str(c // 100) + "." + str(c % 100).zfill(2)
++
++
++def summarize(orders):
++    # orders: list of dicts with keys customer, amount (cents, int), status
++    totals = group_totals(orders)
++    lines = []
++    for n in rank(totals):
++        net, count = totals[n]
++        lines.append(n + ": " + format_cents(net) + " (" + str(count) + " orders)")
++    grand = sum(net for net, _ in totals.values())
++    lines.append("TOTAL: " + format_cents(grand))
+     return "\n".join(lines)
+diff --git a/test_report_parts.py b/test_report_parts.py
+new file mode 100644
+index 0000000..dc225ac
+--- /dev/null
++++ b/test_report_parts.py
+@@ -0,0 +1,41 @@
++import unittest
++
++from report import format_cents, group_totals, rank, summarize
++
++
++def o(customer, amount, status="paid"):
++    return {"customer": customer, "amount": amount, "status": status}
++
++
++class TestParts(unittest.TestCase):
++    def test_group_totals_cancelled_skipped(self):
++        t = group_totals([o("a", 100), o("b", 50, "cancelled"), o("a", 25, "cancelled")])
++        self.assertEqual(t, {"a": (100, 1)})
++
++    def test_group_totals_refunded(self):
++        t = group_totals([o("a", 100), o("a", 30, "refunded"), o("b", 40, "refunded")])
++        self.assertEqual(t, {"a": (70, 2), "b": (-40, 1)})
++
++    def test_rank_ties(self):
++        t = {"b": (10, 1), "a": (10, 1), "c": (20, 1), "d": (-5, 1)}
++        self.assertEqual(rank(t), ["c", "a", "b", "d"])
++
++    def test_format_cents(self):
++        cases = {-305: "-3.05", 7: "0.07", 0: "0.00", -7: "-0.07", 12345: "123.45"}
++        for cents, text in cases.items():
++            self.assertEqual(format_cents(cents), text)
++
++    def test_summarize_end_to_end(self):
++        orders = [o("bob", 500), o("amy", 500), o("amy", 200, "refunded"),
++                  o("zed", 99, "cancelled"), o("cy", 1000)]
++        self.assertEqual(
++            summarize(orders),
++            "cy: 10.00 (1 orders)\nbob: 5.00 (1 orders)\namy: 3.00 (2 orders)\nTOTAL: 18.00",
++        )
++
++    def test_summarize_empty(self):
++        self.assertEqual(summarize([]), "TOTAL: 0.00")
++
++
++if __name__ == "__main__":
++    unittest.main()
