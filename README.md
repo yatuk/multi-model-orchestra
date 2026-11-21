@@ -1,55 +1,77 @@
-# multi-model-orchestra
+<p align="center">
+  <img src="docs/assets/logo.png" width="160" height="160" alt="multi-model-orchestra logo: a conductor's baton over model lanes">
+</p>
 
-<p align="center"><img src="assets/orchestra-comic.png" alt="A conductor hands a bug to a model, asks for the diff, and runs a blind council" width="860"></p>
+<h1 align="center">multi-model-orchestra</h1>
 
-Skills that let a coding agent (Claude Code, or anything that reads `SKILL.md` files) hand work to
-**Claude Opus / Sonnet / Haiku, OpenAI GPT (Codex CLI), Kimi and DeepSeek**, and check the answer
-before using it.
+<p align="center"><sub>English · <a href="docs/README_TR.md">Türkçe</a> · <a href="docs/README_UK.md">Українська</a> · <a href="docs/README_ZH.md">简体中文</a> · <a href="docs/README_ZH-TW.md">繁體中文</a> · <a href="docs/README_DE.md">Deutsch</a> · <a href="docs/README_FR.md">Français</a> · <a href="docs/README_ES.md">Español</a> · <a href="docs/README_JA.md">日本語</a> · <a href="docs/README_KO.md">한국어</a> · <a href="docs/README_AZ.md">Azərbaycanca</a> · <a href="docs/README_UZ.md">Oʻzbekcha</a> · <a href="docs/README_KK.md">Қазақша</a> · <a href="docs/README_KY.md">Кыргызча</a> · <a href="docs/README_TK.md">Türkmençe</a> · <a href="docs/README_TT.md">Татарча</a> · <a href="docs/README_UG.md">ئۇيغۇرچە</a> · <a href="docs/README_PT.md">Português</a> · <a href="docs/README_VI.md">Tiếng Việt</a></sub></p>
 
-The main agent is the conductor: it decides who plays which part, writes the brief, and reviews what comes back.
-The skills give it a routing policy, and the scripts make the dangerous parts boring:
-one runner for every provider, hard status codes, a worktree guard for anything that writes,
-an offline preflight, and a blind council for decisions.
+<p align="center"><b>Let one expensive model conduct, cheaper models play, and check every answer before it's used.</b><br>
+Skills for Claude Code (or anything that reads <code>SKILL.md</code> files) that hand work to Claude Opus, Sonnet and Haiku, OpenAI GPT, Kimi and DeepSeek.<br>
+The main agent plans, writes the briefs and reviews; the other models do the work, and nothing they return is trusted until it passes a check.</p>
 
-```mermaid
-flowchart LR
-    U([You]) --> C{{Conductor<br/>main agent}}
-    C -- "hard work" --> O[Claude Opus]
-    C -- "routine work" --> S[Claude Sonnet]
-    C -- "bulk" --> H[Claude Haiku]
-    C -- "brief" --> R[[mmo-run]]
-    R --> G1[GPT sol<br/>execute]
-    R --> G2[GPT astra<br/>2nd opinion]
-    R --> G3[GPT luna<br/>bulk]
-    R --> K[Kimi<br/>cheap execution]
-    R --> D[DeepSeek<br/>3rd opinion / bulk]
-    C -- "decision" --> CO[[mmo-council<br/>3 lanes, blind]]
-    CO --> G2 & K & D
-    G1 & G2 & G3 & K & D --> V{status ok?<br/>check passes?<br/>diff clean?}
-    O & S & H --> V
-    V -- yes --> M[merge / answer]
-    V -- no --> F[fallback lane<br/>or tell the user]
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/models-Claude%20·%20GPT%20·%20Kimi%20·%20DeepSeek-2563EB" alt="Claude, GPT, Kimi and DeepSeek lanes">
+  <img src="https://img.shields.io/badge/runs%20on-bash%20·%20Git%20Bash%20on%20Windows-4EAA25" alt="Runs on bash, Git Bash on Windows">
+  <a href="https://github.com/yatuk/multi-model-orchestra"><img src="https://img.shields.io/github/stars/yatuk/multi-model-orchestra?style=social" alt="GitHub stars"></a>
+</p>
+
+<p align="center"><b><a href="#quick-start">Install</a></b> · <a href="docs/otomode.md">otomode</a> · <a href="docs/how-it-works.md#council">Council</a> · <a href="docs/benchmark.md">Benchmark</a> · <a href="docs/faq.md">FAQ</a></p>
+
+<p align="center">
+  <img src="assets/orchestra-comic.png" alt="A conductor hands a bug to a model, asks for the diff, and runs a blind council" width="860">
+  <br>
+  <sub>The conductor hands out the parts, asks for the diff, and calls a blind council when the answer is a judgment call.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <b>Route</b><br>
+      Each job goes to the cheapest tier that can pass its check, by difficulty. A lane moves up only after it fails the check, not on a hunch.
+    </td>
+    <td width="25%" valign="top">
+      <b>Brief</b><br>
+      Each tier gets the brief it works best with: goal and constraints for Opus, numbered steps and exact files for the cheaper lanes. A lane sees only the brief, so it is written for a stranger.
+    </td>
+    <td width="25%" valign="top">
+      <b>Run</b><br>
+      <code>mmo-run</code> is the one runner for every provider, with hard status codes and a timeout on every call. Writing lanes run only in a git worktree, never in your main checkout.
+    </td>
+    <td width="25%" valign="top">
+      <b>Check</b><br>
+      The conductor runs the check itself and reads the whole diff. A lane's "done" is a claim, not a result.
+    </td>
+  </tr>
+</table>
+
+## Real numbers
+
+| What | Result | Details |
+|---|---|---|
+| <!-- AB-RESULTS --> A/B: orchestra skill vs. plain "use subagents" (`claude-fable-5-2`, 2 runs per arm) | Same quality: all four runs 36/36 hidden tests, visible tests intact (the task set is too easy to separate quality) | [benchmark.md](docs/benchmark.md#ab-test-orchestra-skill-vs-use-subagents-2026-11-21) |
+| <!-- AB-RESULTS --> A/B cost per run | Skill $1.88 vs $3.21 mean, about 40% less, ranges do not overlap. The saving comes from sub-agents running on Sonnet instead of inheriting Fable. No speed gain (3.2 vs 3.5 min) | [RESULTS.md](bench/ab/results/2026-11-21/RESULTS.md) |
+| <!-- AB-RESULTS --> A/B limits | A one-line "use Sonnet subagents" prompt was not tested and may capture most of the saving. `total_cost_usd` is a list-price proxy, not plan usage | [faq.md](docs/faq.md#why-not-just-tell-the-model-to-use-subagents) |
+| Lane benchmark, 2026-11-21 (bugfix with hidden tests, exact-answer reasoning, 60-line bulk labeling) | Kimi k3.1-pro, DeepSeek v4-pro, DeepSeek flash and gpt-5.6-terra: 6/6, 3/3, 60/60. gpt-6-luna: 6/6, 0/3, 58/60. gpt-6.1-sol and gpt-6-astra: ~6/6, ~3/3, ~60/60 (estimated: not served on that plan, scores from the 2026-11-11 run) | [benchmark.md](docs/benchmark.md) |
+| otomode, one 5-hour unattended run | 13 tasks, one commit each; weekly limit went from 25% to 31%; 6 prompts denied and logged. One run, not a benchmark | [otomode.md](docs/otomode.md#one-real-run) |
+
+> [!WARNING]
+> Briefs leave your machine: every lane sends its brief to that model's vendor. Never put secrets, tokens or
+> personal data in a brief. otomode's hook denies prompts and refuses delete, deploy, push and send commands,
+> but it matches patterns: it is a guard rail, not a sandbox.
+
+## Quick start
+
+Paste this into your agent and let it install the skills:
+
+```text
+Install multi-model-orchestra: clone https://github.com/yatuk/multi-model-orchestra,
+run ./install.sh --link in it, then run ~/.claude/skills/orchestra/scripts/mmo-preflight
+and tell me which lanes are ready.
 ```
 
-## What is inside
-
-| Skill | What it does |
-|---|---|
-| [`orchestra`](skills/orchestra/SKILL.md) | The policy: when not to delegate, who gets which job, brief rules, gates, fallbacks. Holds the scripts and brief templates. |
-| [`council`](skills/council/SKILL.md) | Same question to three model families, read-only, answers shuffled to letters before you judge them. |
-| [`chatgpt-lane`](skills/chatgpt-lane/SKILL.md) | GPT through the Codex CLI: gpt-6.1-sol, gpt-6-astra, gpt-6-luna. |
-| [`kimi-lane`](skills/kimi-lane/SKILL.md) | Kimi through the Kimi Code CLI. |
-| [`deepseek-lane`](skills/deepseek-lane/SKILL.md) | DeepSeek v4-pro and flash through the Kimi Code CLI. |
-| [`otomode`](skills/otomode/SKILL.md) | Unattended runs while you are away: one question round up front, then every prompt is denied and logged, tasks go to lanes, each is checked and committed on its own, and work pauses at 85% plan usage until the reset. |
-
-Claude tiers run as the host agent's own sub-agents (`Agent` tool with an explicit model), so they need no script.
-
-Write-up (Turkish): [Fable 5.2 ile orkestra ve otomode](docs/fable-orkestra-ve-otomode.md), on running an expensive main-loop model as the conductor and leaving it to work unattended.
-
-## Install
-
-Needs bash, git, `timeout` and Python 3. Each lane needs its own CLI, signed in: `codex` for GPT, `kimi` for Kimi and DeepSeek.
-On Windows, use Git Bash.
+Or yourself. Needs bash, git, `timeout` and Python 3; on Windows, use Git Bash.
 
 ```bash
 git clone https://github.com/yatuk/multi-model-orchestra
@@ -59,102 +81,34 @@ cd multi-model-orchestra
 ```
 
 `mmo-preflight` never calls a model. It tells you which lanes exist on this machine, so the conductor routes around the missing ones.
+For otomode, run `python ~/.claude/skills/otomode/scripts/otomode.py install` once to register its hook.
 
-## The runner
+Then ask, for example:
 
-```bash
-mmo-run <codex|kimi|deepseek|claude> --brief FILE --out FILE
-        [-m MODEL] [-e EFFORT] [--mode ro|rw] [-C DIR] [-t SECONDS] [--allow-main]
-```
+- "Fix the failing tests in `internal/auth`. Follow the orchestra skill."
+- "Get a second opinion from GPT on this migration plan before I merge it."
+- "Ask the council: should we split this service or keep one process?"
+- "otomode 6h: these four tasks, each checked with `go test ./...`."
 
-Every lane, whatever the vendor, ends the same way: an output file whose first line is
+## Works with
 
-```
-<!-- mmo provider=kimi model=kimi-code/k3.1-pro mode=rw status=ok exit=0 seconds=36 -->
-```
-
-| Exit | Status | Meaning |
+| Tool | Used for | Needs |
 |---|---|---|
-| 0 | ok | An answer is in the file. Still check it. |
-| 3 | failed | The CLI failed; the last stderr lines are in the file. |
-| 4 | timeout | Killed after `-t` seconds. |
-| 5 | empty | The CLI exited 0 but gave no final answer. |
-| 6 | limit | Quota, balance, rate limit or plan. Use the fallback lane. |
-| 7 | auth | The CLI needs a fresh sign-in. Tell the user. |
+| Claude Code | The skills, and the Claude Opus / Sonnet / Haiku tiers as sub-agents | Skills installed in `~/.claude/skills` (or a project's `.claude/skills`); nothing else |
+| Codex CLI | GPT lanes | `codex` on PATH, signed in with ChatGPT |
+| Kimi Code CLI | Kimi and DeepSeek lanes | `kimi` on PATH, signed in; for DeepSeek, a `deepseek/*` model in Kimi Code's `config.toml` |
 
-### Safety model
+GPT model ids: on some ChatGPT plans the Codex CLI now serves different ids (for example gpt-5.6-terra or gpt-6-luna)
+and rejects others. The skill files name the defaults; smoke-test the ids your plan accepts before routing work there
+(`mmo-preflight` to see the CLIs, then a one-line `mmo-run` brief per id). See [Model ids](docs/how-it-works.md#model-ids).
 
-- **Writes only in a worktree.** `--mode rw` refuses to run unless `-C` is a linked git worktree. A lane cannot edit your main checkout by accident.
-- **Read-only means read-only.** Codex gets its read-only sandbox. Kimi Code has none and edits files in print mode even when asked not to, so read-only Kimi and DeepSeek lanes run in a throwaway detached worktree; anything they write is thrown away and flagged `ro_violation=yes`.
-- **A failed lane is not an answer.** No falling through to "the model said nothing, so it's fine". The council records a failed lane as *not an answer, not a vote*.
-- **No stdin, always a timeout.** Every CLI runs with `</dev/null` under `timeout -k 10`, so nothing hangs on a prompt.
-- **Briefs leave your machine.** The skills say it plainly: never put secrets or personal data in a brief.
+## More
 
-## otomode: work while you are away
-
-```
-otomode 6h      ask everything once, write OTOMODE.md, turn the hook on, work
-otomode off     hook off first, short report, then the questions it saved
-```
-
-- **One round of questions, then none.** Tasks, the check for each (a command whose exit code decides), the allow rules the run needs, what is off limits. After that a hook denies every permission prompt and every question for that session and appends it to `QUESTIONS.md`; the agent takes the safe default or marks the task blocked and moves on.
-- **Never delete, deploy or send.** The hook also refuses `rm`, `git push`, branch and worktree removal, `reset --hard`, deploy CLIs, ssh/scp, write requests, `gh pr`/`issue` writes, publish and mail, plus MCP tools named send, post, delete, submit or upload. It is a guard rail, not a sandbox.
-- **Lanes do the work, the conductor checks it.** Each task goes to a sub-agent or an `mmo-run` lane in its own worktree; the main agent runs the task's check itself and commits the task alone on an `otomode/<time>` branch. Three failed tries or a blocker: note why, move on.
-- **Usage aware.** `otomode.py gate` says go or stop before every task; at 85% it stops starting work and schedules a one-shot cron for just after the reset. An hourly watchdog cron restarts a stalled loop. Crons live in the session, so keep it open.
-
-Setup once: `python ~/.claude/skills/otomode/scripts/otomode.py install`. For the gate in the CLI, use `skills/otomode/scripts/statusline.py` as your status line (it saves the plan usage Claude Code passes to it).
-
-## Benchmark
-
-`bench/run.sh` runs three tasks on every lane in parallel and grades them with no model in the loop:
-
-| Task | Mode | Graded by |
-|---|---|---|
-| **bugfix**: fix a duration parser so it follows five written rules | rw, own worktree | visible tests must pass and stay unedited; score = share of 6 hidden tests passed |
-| **reasoning**: two Python trace questions and one counting question, no running code | ro | exact match against answers computed by running the code |
-| **bulk**: label 60 log lines CRITICAL / ERROR / WARN / INFO by first-match rules with traps (`panicked`, `errorless`, 404) | ro | accuracy against gold labels generated from the same rules |
-
-Results from 2026-11-11 (one run per cell; full answers and diffs in [`bench/results/2026-11-11`](bench/results/2026-11-11)):
-
-| Lane | bugfix (hidden) | reasoning | bulk | wall time (s) b / r / k |
-|---|---|---|---|---|
-| GPT gpt-6.1-sol | 6/6 | 3/3 | 60/60 | 79 / 12 / 15 |
-| GPT gpt-6-astra | 6/6 | 3/3 | 60/60 | 45 / 14 / 17 |
-| GPT gpt-6-luna (effort low) | visible tests fail | 2/3 | 56/60 | 38 / 11 / 13 |
-| Kimi k3.1-pro | 6/6 | 3/3 | 60/60 | 36 / 11 / 16 |
-| Kimi k3.1-pro-highspeed | not on this plan (`limit`) |: |: |: |
-| DeepSeek v4-pro | 6/6 | 3/3 | 60/60 | 49 / 10 / 17 |
-| DeepSeek flash | 6/6 | 3/3 | 60/60 | 14 / 4 / 9 |
-| Claude Opus (sub-agent) | 6/6 | 3/3 | 60/60 | n/a |
-| Claude Sonnet (sub-agent) | 6/6 | 3/3 | 60/60 | n/a |
-| Claude Haiku (sub-agent) | 6/6 | 3/3 | 60/60 | n/a |
-
-How to read it:
-- **This is a smoke test, not a leaderboard.** One run per cell, small tasks. Most strong lanes max it out. It tells you which lanes work end to end on your machine and which are not good enough for a job, not which model is "best".
-- **The cheap tier is where it bites.** gpt-6-luna at low effort broke the visible tests and mislabeled 4 trap lines, so bulk work on luna needs a sample check. DeepSeek flash was fastest and clean here.
-- **The benchmark found two runner bugs before you would have.** Kimi Code rejects `-p` with `--auto` (write lanes failed in 1 s), and the answer extractor crashed on a non-ASCII arrow on a Windows console code page, which turned a correct DeepSeek fix into `empty`. Both are fixed and the lanes re-run; the table shows the re-runs. That is the point of hard status gates: the failure showed up as a status, not as a silent wrong answer.
-- Claude tiers ran as Claude Code sub-agents, so there are no comparable wall times.
-
-Run it on your own stack:
-
-```bash
-bench/run.sh                                    # default lanes
-bench/run.sh codex:gpt-6.1-sol:high kimi:kimi-code/k3.1-pro
-```
-
-## How this compares
-
-Other projects solve parts of this well. This repo borrows no code from them; the table is from their public READMEs as of November 2026.
-
-| Project | Best at | What this repo adds |
-|---|---|---|
-| jarrodwatts/claude-delegator (archived) | Expert personas over Codex/GPT, advisory vs. implementation modes | Kimi and DeepSeek lanes, Claude tier routing, one status contract for all CLIs |
-| hkasahar/claude-code-skills | File-based delegation with a checkable header, offline preflight | Same ideas across four CLIs, plus worktree-only writes and a benchmark |
-| k1064190/claude-code-gemini-cli-skills | Strict timeouts, exit-code gates, pinned models for Gemini | The same discipline for GPT, Kimi and DeepSeek |
-| rachittshah/llmcouncil | Many council modes (vote, debate, critique), anonymized peer review | A small blind council that runs on CLIs you already pay for, with failed lanes excluded |
-| PAL MCP (consensus) | Stance-steered consensus through one MCP server | No server: plain scripts and skills, enforced read-only for every lane |
-
-None of the above covered Kimi or DeepSeek through their coding CLIs when this was written.
+- [How it works](docs/how-it-works.md): routing table, runner, status codes, safety model, council.
+- [otomode](docs/otomode.md): unattended runs while you are away.
+- [Benchmark](docs/benchmark.md): lane benchmark and the A/B test, with how to run both.
+- [FAQ](docs/faq.md): including how this compares to similar projects.
+- Write-up (Turkish): [Fable 5.2 ile orkestra ve otomode](docs/fable-orkestra-ve-otomode.md), on running an expensive main-loop model as the conductor and leaving it to work unattended.
 
 ## Layout
 
@@ -163,9 +117,10 @@ skills/
   orchestra/   SKILL.md, scripts/ (mmo-run, mmo-council, mmo-preflight, mmo_extract.py), templates/
   council/     chatgpt-lane/  kimi-lane/  deepseek-lane/
   otomode/     SKILL.md, scripts/ (otomode.py: switch, hook, usage gate; statusline.py)
-bench/         run.sh, grade.py, tasks/, results/
+bench/         run.sh, grade.py, tasks/, results/; ab/ for the A/B test
+docs/          how-it-works, otomode, benchmark, faq, translations
 ```
 
 ## License
 
-MIT. The README illustration was generated with gpt-image-2 through the Codex CLI.
+MIT, see [LICENSE](LICENSE). The README illustration was generated with gpt-image-2 through the Codex CLI.
