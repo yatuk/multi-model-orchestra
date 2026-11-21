@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="160" height="160" alt="multi-model-orchestra logo: a conductor's baton over model lanes">
+  <img src="docs/assets/logo.png" width="160" height="160" alt="multi-model-orchestra logo: a cartoon conductor with a red bow tie raising a baton">
 </p>
 
 <h1 align="center">multi-model-orchestra</h1>

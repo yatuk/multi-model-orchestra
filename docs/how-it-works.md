@@ -104,6 +104,7 @@ scripts/mmo-run deepseek -m deepseek/deepseek-v4-pro --mode ro --brief q.md --ou
 | 5 | empty | The CLI exited 0 but gave no final answer. |
 | 6 | limit | Quota, balance, rate limit or plan. Use the fallback lane. |
 | 7 | auth | The CLI needs a fresh sign-in. Tell the user. |
+| 8 | model | The model id was rejected (`model_not_found`). Switch to an id that answers; waiting will not help. |
 
 ## Safety model
 
