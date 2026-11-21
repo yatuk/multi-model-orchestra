@@ -44,6 +44,8 @@ flowchart LR
 
 Claude tiers run as the host agent's own sub-agents (`Agent` tool with an explicit model), so they need no script.
 
+Write-up (Turkish): [Fable 5.2 ile orkestra ve otomode](docs/fable-orkestra-ve-otomode.md), on running an expensive main-loop model as the conductor and leaving it to work unattended.
+
 ## Install
 
 Needs bash, git, `timeout` and Python 3. Each lane needs its own CLI, signed in: `codex` for GPT, `kimi` for Kimi and DeepSeek.
