@@ -102,6 +102,17 @@ GPT model ids: on some ChatGPT plans the Codex CLI now serves different ids (for
 and rejects others. The skill files name the defaults; smoke-test the ids your plan accepts before routing work there
 (`mmo-preflight` to see the CLIs, then a one-line `mmo-run` brief per id). See [Model ids](docs/how-it-works.md#model-ids).
 
+## First PR in 10 minutes
+
+No setup needed for most of these:
+
+- **Read the README in your language** and fix what sounds machine made. All 19 translations were made by a model ([Crimean Tatar](https://github.com/yatuk/multi-model-orchestra/issues/1), [Uyghur](https://github.com/yatuk/multi-model-orchestra/issues/2), [Turkmen](https://github.com/yatuk/multi-model-orchestra/issues/3), [Kazakh](https://github.com/yatuk/multi-model-orchestra/issues/4), [the rest](https://github.com/yatuk/multi-model-orchestra/issues/5)).
+- **Paste an error line** a CLI gave you (rate limit, expired login, unknown model) so the runner can tell it apart ([#10](https://github.com/yatuk/multi-model-orchestra/issues/10)).
+- **Run the tests on macOS or Linux** and say what broke ([#8](https://github.com/yatuk/multi-model-orchestra/issues/8)).
+- **Add a lane** for the CLI you use ([Gemini CLI](https://github.com/yatuk/multi-model-orchestra/issues/6), [Aider](https://github.com/yatuk/multi-model-orchestra/issues/7)), or [vote for the next one](https://github.com/yatuk/multi-model-orchestra/discussions/12).
+
+All of them: [good first issues](https://github.com/yatuk/multi-model-orchestra/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). How you route your own work is welcome in [Show your routing setup](https://github.com/yatuk/multi-model-orchestra/discussions/11). See [CONTRIBUTING](CONTRIBUTING.md).
+
 ## More
 
 - [How it works](docs/how-it-works.md): routing table, runner, status codes, safety model, council.
