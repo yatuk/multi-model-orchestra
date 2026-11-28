@@ -41,6 +41,22 @@ printf 'Execution failed: Model "no-such-model-xyz" is not available.
 ' > "$T/e8"
 check "copilot unknown model (real text)" model copilot "$T/brief" "$T/e8"
 
+printf 'Upstream request failed: Model is unavailable
+' > "$T/e9"
+check "opencode model is unavailable" model opencode "$T/brief" "$T/e9"
+
+printf 'Your credit balance is too low to access the Anthropic API.
+' > "$T/e10"
+check "anthropic credit balance too low" limit claude "$T/brief" "$T/e10"
+
+printf 'Error: RESOURCE_EXHAUSTED: Resource has been exhausted
+' > "$T/e11"
+check "gemini resource exhausted" limit gemini "$T/brief" "$T/e11"
+
+printf 'Error: invalid_api_key provided for provider
+' > "$T/e12"
+check "invalid_api_key auth error" auth codex "$T/brief" "$T/e12"
+
 # End to end with a fake codex on PATH: brief mentions 429, CLI fails with model_not_found / succeeds.
 mkdir -p "$T/bin"
 cat > "$T/bin/codex" <<'FAKE'

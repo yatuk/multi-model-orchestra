@@ -15,7 +15,7 @@ import sys
 
 MODEL = re.compile(
     r"model_not_found|model is not supported|model .{0,80}not supported|unknown model|"
-    r"invalid model|model unavailable|model .{0,80}is not available|model .{0,80}(does not exist|not found)|no such model|cannot use this model|code 1211\b|requires specifying a model", re.I)
+    r"invalid model|model (?:is )?unavailable|model .{0,80}is not available|model .{0,80}(does not exist|not found)|no such model|cannot use this model|code 1211\b|requires specifying a model", re.I)
 LIMIT = re.compile(
     r"insufficient balance|\b402\b|quota|usage limit|rate.?limit|\b429\b|exceeded your|"
     r"does not have access|upgrade to", re.I)
@@ -28,8 +28,11 @@ SIGN_IN = re.compile(
 # Strings quoted from the docs or source of gemini, crush, aider and opencode (no sign-in word in them).
 EXTRA_AUTH = re.compile(
     r"please set an auth method|no providers configured|unable to proceed without an? .{0,30}api key|"
-    r"is required to resolve the provider endpoint|no auth type is selected", re.I)
-EXTRA_LIMIT = re.compile(r"exhausted your capacity|capacity exceeded|model_capacity_exhausted|not included in your (weekly )?usage", re.I)
+    r"is required to resolve the provider endpoint|no auth type is selected|"
+    r"invalid[_ ]api[_ ]key|invalid x-api-key|api key (?:is )?(?:invalid|expired|missing)", re.I)
+EXTRA_LIMIT = re.compile(
+    r"exhausted your capacity|capacity exceeded|model_capacity_exhausted|"
+    r"not included in your (weekly )?usage|credit balance is too low|resource_exhausted", re.I)
 CODEX_ERR = re.compile(
     r"^\s*(error|warning: stream|stream error|unexpected status|exceeded retry|turn\.failed|"
     r"\{|\[?error)", re.I)
