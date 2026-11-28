@@ -4,20 +4,36 @@
 
 <h1 align="center">multi-model-orchestra</h1>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude-D97757?style=flat-square&logo=claude&logoColor=white" alt="Claude" height="22">
+  <img src="https://img.shields.io/badge/GPT%20(Codex)-10A37F?style=flat-square" alt="GPT (Codex)" height="22">
+  <img src="https://img.shields.io/badge/DeepSeek-4D6BFE?style=flat-square&logo=deepseek&logoColor=white" alt="DeepSeek" height="22">
+  <img src="https://img.shields.io/badge/Kimi-1B1B1B?style=flat-square&logo=kimi&logoColor=white" alt="Kimi" height="22">
+  <img src="https://img.shields.io/badge/Grok-000000?style=flat-square" alt="Grok" height="22">
+  <img src="https://img.shields.io/badge/OpenCode-211E1E?style=flat-square&logo=opencode&logoColor=white" alt="OpenCode" height="22">
+  <img src="https://img.shields.io/badge/Gemini-8E75B2?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini" height="22">
+  <img src="https://img.shields.io/badge/Cursor-000000?style=flat-square&logo=cursor&logoColor=white" alt="Cursor" height="22">
+  <img src="https://img.shields.io/badge/OpenRouter-6467F2?style=flat-square&logo=openrouter&logoColor=white" alt="OpenRouter" height="22">
+  <img src="https://img.shields.io/badge/NVIDIA-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA" height="22">
+  <img src="https://img.shields.io/badge/Baidu-2932E1?style=flat-square&logo=baidu&logoColor=white" alt="Baidu" height="22">
+  <br>
+  <sub>Proveedores cuyos modelos se han ejecutado a través de una lane y puntuado en el <a href="benchmark.md">benchmark</a>. Los nombres y logotipos pertenecen a sus propietarios; no se implica ningún respaldo.</sub>
+</p>
+
 <p align="center"><sub><a href="../README.md">English</a> · <a href="README_TR.md">Türkçe</a> · <a href="README_UK.md">Українська</a> · <a href="README_ZH.md">简体中文</a> · <a href="README_ZH-TW.md">繁體中文</a> · <a href="README_DE.md">Deutsch</a> · <a href="README_FR.md">Français</a> · Español · <a href="README_JA.md">日本語</a> · <a href="README_KO.md">한국어</a> · <a href="README_AZ.md">Azərbaycanca</a> · <a href="README_UZ.md">Oʻzbekcha</a> · <a href="README_KK.md">Қазақша</a> · <a href="README_KY.md">Кыргызча</a> · <a href="README_TK.md">Türkmençe</a> · <a href="README_CRH.md">Qırımtatarca</a> · <a href="README_UG.md">ئۇيغۇرچە</a> · <a href="README_PT.md">Português</a> · <a href="README_VI.md">Tiếng Việt</a></sub></p>
 
 <p align="center"><b>Que un modelo caro dirija, que modelos más baratos toquen, y que cada respuesta se compruebe antes de usarla.</b><br>
-Skills para Claude Code (o cualquier cosa que lea archivos <code>SKILL.md</code>) que reparten el trabajo entre Claude Opus, Sonnet y Haiku, OpenAI GPT, Kimi y DeepSeek.<br>
+Skills para Claude Code (o cualquier cosa que lea archivos <code>SKILL.md</code>) que reparten el trabajo entre Claude Opus, Sonnet y Haiku, OpenAI GPT, Kimi, DeepSeek y cualquier CLI de agente o API que tengas: OpenCode, Grok, Gemini, Qwen, Cursor, Copilot, OpenRouter, modelos locales y más.<br>
 El agente principal planifica, escribe los briefs y revisa; los demás modelos hacen el trabajo, y nada de lo que devuelven se da por bueno hasta que pasa una comprobación.</p>
 
 <p align="center">
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-555" alt="Licencia MIT"></a>
-  <img src="https://img.shields.io/badge/models-Claude%20·%20GPT%20·%20Kimi%20·%20DeepSeek-2563EB" alt="Lanes de Claude, GPT, Kimi y DeepSeek">
+  <img src="https://img.shields.io/badge/lanes-32%20CLIs%20and%20APIs-2563EB" alt="32 lanes: CLI de agentes y API">
   <img src="https://img.shields.io/badge/runs%20on-bash%20·%20Git%20Bash%20on%20Windows-4EAA25" alt="Funciona con bash, Git Bash en Windows">
   <a href="https://github.com/yatuk/multi-model-orchestra"><img src="https://img.shields.io/github/stars/yatuk/multi-model-orchestra?style=social" alt="Estrellas de GitHub"></a>
 </p>
 
-<p align="center"><b><a href="#inicio-rápido">Instalar</a></b> · <a href="otomode.md">otomode</a> · <a href="how-it-works.md#council">Council</a> · <a href="benchmark.md">Benchmark</a> · <a href="faq.md">FAQ</a></p>
+<p align="center"><b><a href="#inicio-rápido">Instalar</a></b> · <a href="lanes/README.md">Lanes</a> · <a href="otomode.md">otomode</a> · <a href="how-it-works.md#council">Council</a> · <a href="benchmark.md">Benchmark</a> · <a href="faq.md">FAQ</a></p>
 
 <p align="center">
   <img src="../assets/orchestra-comic.png" alt="Un director entrega un bug a un modelo, pide el diff y convoca un council a ciegas" width="860">
@@ -37,11 +53,11 @@ El agente principal planifica, escribe los briefs y revisa; los demás modelos h
     </td>
     <td width="25%" valign="top">
       <b>Ejecutar</b><br>
-      <code>mmo-run</code> es el único runner para todos los proveedores, con códigos de estado estrictos y un timeout en cada llamada. Las lanes que escriben solo corren en un worktree de git, nunca en tu checkout principal.
+      <code>mmo-run</code> es el único runner para todas las lanes, con códigos de estado estrictos y un timeout en cada llamada. Las lanes que escriben solo corren en un worktree de git que contiene tu rama, nunca en tu checkout principal.
     </td>
     <td width="25%" valign="top">
       <b>Comprobar</b><br>
-      El director ejecuta él mismo la comprobación y lee el diff completo. El "hecho" de una lane es una afirmación, no un resultado.
+      El director ejecuta él mismo la comprobación con <code>mmo-check</code> y lee el diff completo: las pruebas tocadas, los archivos fuera del brief y una comprobación que pasaría sin el cambio se marcan todos. El "hecho" de una lane es una afirmación, no un resultado.
     </td>
   </tr>
 </table>
@@ -52,7 +68,7 @@ El agente principal planifica, escribe los briefs y revisa; los demás modelos h
 |---|---|---|
 | <!-- AB-RESULTS --> A/B: skill orchestra frente a un simple "use subagents" (`claude-fable-5-2`, 2 ejecuciones por brazo) | Misma calidad: las cuatro ejecuciones con 36/36 pruebas ocultas, pruebas visibles intactas (el conjunto de tareas es demasiado fácil para separar la calidad) | [benchmark.md](benchmark.md#ab-test-orchestra-skill-vs-use-subagents-2026-11-21) |
 | <!-- AB-RESULTS --> A/B coste por ejecución | Skill $1.88 frente a $3.21 de media, cerca de un 40 % menos, los rangos no se solapan. El ahorro viene de que los sub-agents corren en Sonnet en lugar de heredar Fable. Sin mejora de velocidad (3.2 frente a 3.5 min) | [RESULTS.md](../bench/ab/results/2026-11-21/RESULTS.md) |
-| <!-- AB-RESULTS --> A/B límites | Un prompt de una línea "use Sonnet subagents" no se probó y podría captar la mayor parte del ahorro. `total_cost_usd` es un indicador a precio de lista, no el uso del plan | [faq.md](faq.md#why-not-just-tell-the-model-to-use-subagents) |
+| <!-- AB-RESULTS --> A/B límites | Un prompt de una línea "use Sonnet subagents" (2026-11-28, 2 ejecuciones, 36/36, media $1.49, sub-agents en Sonnet) captó todo el ahorro sin el skill; A y B se ejecutaron otro día, así que no es una comparación controlada. `total_cost_usd` es un indicador a precio de lista, no el uso del plan | [faq.md](faq.md#why-not-just-tell-the-model-to-use-subagents) |
 | Benchmark de lanes, 2026-11-21 (corrección de un bug con pruebas ocultas, razonamiento de respuesta exacta, etiquetado masivo de 60 líneas) | Kimi k3.1-pro, DeepSeek v4-pro, DeepSeek flash y gpt-5.6-terra: 6/6, 3/3, 60/60. gpt-6-luna: 6/6, 0/3, 58/60. gpt-6.1-sol y gpt-6-astra: ~6/6, ~3/3, ~60/60 (estimado: no se ofrecen en ese plan, puntuaciones de la ejecución del 2026-11-11) | [benchmark.md](benchmark.md) |
 | otomode, una ejecución desatendida de 5 horas | 13 tareas, un commit cada una; el límite semanal pasó del 25 % al 31 %; 6 avisos denegados y registrados. Una ejecución, no un benchmark | [otomode.md](otomode.md#one-real-run) |
 
@@ -88,6 +104,7 @@ Después pide, por ejemplo:
 - "Fix the failing tests in `internal/auth`. Follow the orchestra skill."
 - "Get a second opinion from GPT on this migration plan before I merge it."
 - "Ask the council: should we split this service or keep one process?"
+- "Do this migration yourself; use the advisor skill with GPT before you start and before you say done."
 - "otomode 6h: these four tasks, each checked with `go test ./...`."
 
 ## Funciona con
@@ -97,30 +114,55 @@ Después pide, por ejemplo:
 | Claude Code | Los skills y los niveles Claude Opus / Sonnet / Haiku como sub-agents | Skills instalados en `~/.claude/skills` (o en el `.claude/skills` de un proyecto); nada más |
 | Codex CLI | Lanes GPT | `codex` en el PATH, con sesión iniciada en ChatGPT |
 | Kimi Code CLI | Lanes Kimi y DeepSeek | `kimi` en el PATH, con sesión iniciada; para DeepSeek, un modelo `deepseek/*` en el `config.toml` de Kimi Code |
+| OpenCode | Cualquier proveedor en el que haya iniciado sesión (DeepSeek, OpenRouter, Ollama, sus modelos gratuitos) | `opencode` en el PATH |
+| Grok CLI | Lanes Grok | `grok` en el PATH, con sesión iniciada |
+| Cursor CLI | Lanes Cursor | `cursor-agent` en el PATH, con sesión iniciada |
+| Antigravity CLI | Lanes Antigravity | `agy` en el PATH, con sesión iniciada |
+| Copilot CLI | Lanes Copilot | `copilot` en el PATH, con sesión iniciada |
+| 19 CLI de agentes más | Gemini CLI, Qwen Code, Amp, Droid, Auggie, Kiro, Cline, Kilo, Vibe, Crush, Goose, Aider, Pi, Devin, CodeBuddy, Letta Code, Qoder, gptme, llm | La CLI en el PATH, con sesión iniciada. Escritas a partir de la documentación de cada CLI y aún no ejecutadas por el mantenedor: [qué significa](lanes/README.md#what-checked-means) |
+| Sin ninguna CLI | La lane `api`: cualquier endpoint compatible con OpenAI (OpenRouter, DeepSeek, Groq, un Ollama local, ...) para opiniones y trabajo en masa | Python 3 y una clave en una variable de entorno |
+| Agentes en la nube (experimental) | Devin, agentes en la nube de Cursor, tareas de agente de Copilot mediante `mmo-cloud` | Una clave del proveedor, y el código subido a un lugar al que el agente pueda acceder |
+
+`mmo-run --list` muestra cada lane y si está lista en tu máquina. Detalles de cada lane: [docs/lanes](lanes/README.md).
 
 IDs de modelos GPT: en algunos planes de ChatGPT, la Codex CLI ahora sirve otros ids (por ejemplo gpt-5.6-terra o gpt-6-luna)
 y rechaza otros. Los archivos de skills indican los valores por defecto; prueba los ids que acepta tu plan antes de enrutar trabajo allí
 (`mmo-preflight` para ver las CLI, y luego un brief de una línea con `mmo-run` por cada id). Consulta [Model ids](how-it-works.md#model-ids).
 
+## Primer PR en 10 minutos
+
+Para la mayoría no hace falta configurar nada:
+
+- **Lee el README en tu idioma** y corrige lo que suene a traducción automática. Las 19 traducciones las hizo un modelo ([tártaro de Crimea](https://github.com/yatuk/multi-model-orchestra/issues/1), [uigur](https://github.com/yatuk/multi-model-orchestra/issues/2), [turcomano](https://github.com/yatuk/multi-model-orchestra/issues/3), [kazajo](https://github.com/yatuk/multi-model-orchestra/issues/4), [el resto](https://github.com/yatuk/multi-model-orchestra/issues/5)).
+- **Pega una línea de error** que te haya dado una CLI (límite de uso, sesión caducada, modelo desconocido) para que el runner pueda distinguirla ([#10](https://github.com/yatuk/multi-model-orchestra/issues/10)).
+- **Ejecuta las pruebas en macOS o Linux** y cuenta qué falló ([#8](https://github.com/yatuk/multi-model-orchestra/issues/8)).
+- **Añade una lane** para la CLI que uses ([Gemini CLI](https://github.com/yatuk/multi-model-orchestra/issues/6), [Aider](https://github.com/yatuk/multi-model-orchestra/issues/7)), o [vota por la siguiente](https://github.com/yatuk/multi-model-orchestra/discussions/12).
+
+Todas: [good first issues](https://github.com/yatuk/multi-model-orchestra/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Cómo enrutas tu propio trabajo es bienvenido en [Show your routing setup](https://github.com/yatuk/multi-model-orchestra/discussions/11). Consulta [CONTRIBUTING](../CONTRIBUTING.md).
+
 ## Más
 
 Los documentos siguientes están en inglés.
 
-- [How it works](how-it-works.md): tabla de enrutamiento, runner, códigos de estado, modelo de seguridad, council.
+- [How it works](how-it-works.md): tabla de enrutamiento, runner, códigos de estado, comprobación de una lane, modelo de seguridad, council.
+- [Lanes](lanes/README.md): cada lane, hasta dónde se ha comprobado y cómo añadir una.
 - [otomode](otomode.md): ejecuciones desatendidas mientras no estás.
 - [Benchmark](benchmark.md): benchmark de lanes y prueba A/B, con instrucciones para ejecutar ambos.
+- [Cost](cost.md): las ocho palancas de coste y los comandos que aplican o miden cada una.
 - [FAQ](faq.md): incluida la comparación con proyectos similares.
+- [Failures seen](failures.md): cómo se ve cada fallo y qué lo arregló.
 - Artículo (en turco): [Fable 5.2 ile orkestra ve otomode](fable-orkestra-ve-otomode.md), sobre usar un modelo caro de bucle principal como director y dejarlo trabajar sin supervisión.
 
 ## Estructura
 
 ```
 skills/
-  orchestra/   SKILL.md, scripts/ (mmo-run, mmo-council, mmo-preflight, mmo_extract.py), templates/
-  council/     chatgpt-lane/  kimi-lane/  deepseek-lane/
+  orchestra/   SKILL.md, lanes.md, templates/, scripts/ (mmo-run, mmo-check, mmo-council, mmo-score,
+               mmo-cloud, mmo-preflight, providers/ with one file per lane)
+  council/     chatgpt-lane/  kimi-lane/  deepseek-lane/  cloud-lane/
   otomode/     SKILL.md, scripts/ (otomode.py: switch, hook, usage gate; statusline.py)
 bench/         run.sh, grade.py, tasks/, results/; ab/ for the A/B test
-docs/          how-it-works, otomode, benchmark, faq, translations
+docs/          how-it-works, lanes/, otomode, benchmark, faq, translations
 ```
 
 ## Licencia

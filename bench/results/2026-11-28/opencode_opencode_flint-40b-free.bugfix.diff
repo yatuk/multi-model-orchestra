@@ -1,0 +1,57 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..352e2ae 100644
+--- a/durations.py
++++ b/durations.py
+@@ -2,6 +2,8 @@
+ 
+ UNITS = {"h": 3600, "m": 60, "s": 1}
+ 
++_UNIT_ORDER = {"h": 0, "m": 1, "s": 2}
++
+ 
+ def parse_duration(text):
+     """Return the number of seconds in a duration like "1h30m15s".
+@@ -14,14 +16,34 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not isinstance(text, str) or not text:
++        raise ValueError("empty duration")
++
+     total = 0
+-    num = ""
+-    for ch in text:
+-        if ch.isdigit():
+-            num += ch
+-        elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
+-            num = ""
+-        else:
+-            raise ValueError(f"bad character {ch!r}")
++    last_order = -1
++    i = 0
++    n = len(text)
++    seen_any = False
++
++    while i < n:
++        j = i
++        while j < n and text[j] in "0123456789":
++            j += 1
++        if j == i:
++            raise ValueError(f"bad character {text[i]!r}")
++        if j >= n or text[j] not in UNITS:
++            raise ValueError(f"missing unit for number {text[i:j]!r}")
++        num = int(text[i:j])
++        unit = text[j]
++        order = _UNIT_ORDER[unit]
++        if order <= last_order:
++            raise ValueError(f"unit {unit!r} out of order or repeated")
++        last_order = order
++        seen_any = True
++        total += num * UNITS[unit]
++        i = j + 1
++
++    if not seen_any:
++        raise ValueError("empty duration")
++
+     return total

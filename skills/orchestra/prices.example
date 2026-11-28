@@ -1,0 +1,12 @@
+# Prices for `mmo-score --cost`. Copy to ~/.config/mmo/prices (or point MMO_PRICES at a copy, or pass
+# --prices FILE). The repo ships no real prices on purpose: they change, and plans differ.
+#
+# Format, one line per lane pattern, first match wins, `#` starts a comment:
+#   provider/model-pattern   input-per-million   output-per-million   [cached-input-per-million]
+# The pattern is a shell-style glob matched against `provider/model`, the lane name in the score table.
+# Prices are US dollars per million tokens. They are used only for runs that have token counts and no
+# reported cost, and every figure computed from them is marked ~ (an estimate, not a reported cost).
+#
+# The two lines below are fake examples. Replace them with numbers from your own price page.
+api/example:cheap-model-*    0.10   0.40
+api/example:big-model        3.00   15.00   0.30

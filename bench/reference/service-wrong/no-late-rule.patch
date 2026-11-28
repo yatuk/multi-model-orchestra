@@ -1,0 +1,13 @@
+diff -ru a/roombook/report/usage.py b/roombook/report/usage.py
+--- a/roombook/report/usage.py	2026-11-28 16:09:37.702121600 +0300
++++ b/roombook/report/usage.py	2026-11-28 16:09:37.990430200 +0300
+@@ -46,8 +46,7 @@
+             continue
+         if b.is_cancelled:
+             row.cancelled += 1
+-            if not b.is_late_cancel(settings.late_cancel_hours):
+-                continue
++            continue
+         row.bookings += 1
+         row.minutes += b.minutes
+     return [rows[c] for c in sorted(rows)]

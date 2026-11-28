@@ -1,0 +1,2 @@
+<!-- mmo provider=agy model=gemini-4-argon-high mode=rw status=ok exit=0 seconds=63 base=5993ac539 changed=1 -->
+DONE: Updated `parse_duration` in [durations.py](<workdir>/durations.py) to enforce all docstring rules (non-empty input, valid ASCII digit numbers before every unit, no trailing numbers, each of `h`, `m`, `s` at most once in strict `h, m, s` order) and verified `python -m unittest test_durations` passes.

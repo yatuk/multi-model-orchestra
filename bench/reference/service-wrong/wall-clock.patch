@@ -1,0 +1,23 @@
+diff -ru a/roombook/service.py b/roombook/service.py
+--- a/roombook/service.py	2026-11-28 16:09:39.401020600 +0300
++++ b/roombook/service.py	2026-11-28 16:09:39.505205300 +0300
+@@ -4,6 +4,7 @@
+ admin (see settings, [people]) manage everyone's.
+ """
+ from dataclasses import dataclass, field
++from datetime import datetime
+ from datetime import timedelta
+ 
+ from . import clock, notify
+@@ -91,8 +92,9 @@
+         if b.start <= now:
+             raise UsageError(f"{b.label} has already started")
+         late = b.start - now < timedelta(hours=self.settings.late_cancel_hours)
+-        self.bookings.mark_cancelled(b.id, now, self.actor, reason)
+-        b.status, b.cancelled_at, b.cancelled_by, b.cancel_reason = "cancelled", now, self.actor, reason or ""
++        stamp = datetime.now().replace(second=0, microsecond=0)
++        self.bookings.mark_cancelled(b.id, stamp, self.actor, reason)
++        b.status, b.cancelled_at, b.cancelled_by, b.cancel_reason = "cancelled", stamp, self.actor, reason or ""
+         self._log("cancel", b.id, f"{b.room} {b.span_text()}" + (" (late)" if late else "")
+                   + (f": {reason}" if reason else ""))
+         notify.tell_owner(self.settings, "cancelled", b, self.actor, f"Reason: {reason}" if reason else "")

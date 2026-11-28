@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# mmo-advise: the session's own (cheaper) model does the task; at a few hard points it asks a
+# stronger model for short advice, read-only, through mmo-run.
+#
+#   mmo-advise --moment plan|stuck|done --question FILE [--evidence [head:|tail:]FILE]...
+#              [--diff REF] [--lane provider:model] [-C DIR] [-t SECONDS] [--out FILE]
+#              [--max-lines N] [--max-chars N] [--budget N] [--budget-chars N] [--state FILE]
+#              [--strict-no-tools]
+#   mmo-advise status [-C DIR] [--state FILE] [--budget N] [--budget-chars N]
+#                     consultations and characters used and left, and the count per moment
+#
+#   plan   the task and the approach I am about to take: what is wrong, what instead, what bites later
+#   stuck  the task, what I tried, the error (pass it with --evidence; logs keep their tail):
+#          the most likely cause and the one experiment that tells
+#   done   the task and the change (--diff REF attaches git diff REF from -C): is it done,
+#          and the strongest reason it is not
+#
+# Lane: --lane, else MMO_ADVISOR, else the first line of `mmo-roster ready --tier strong` when
+# mmo-roster sits next to this script or on PATH; from the roster the first READY lane with no tools
+# at all (READ-ONLY kind notools in mmo-run --list) is preferred. No lane is ever guessed, and an
+# explicit --lane or MMO_ADVISOR is always honored.
+# The advisor runs in an empty folder: it sees the brief and nothing else. A lane with no tools
+# (notools, e.g. api:<endpoint>:<model>) cannot read anything at all: header tools=none. Any other lane
+# is read-only with its tools in that empty folder: header "tools=read-only, empty folder".
+# --strict-no-tools (or MMO_ADVISE_STRICT=1) refuses every lane that is not notools (exit 2).
+#
+# The answer is printed (and written to --out with a header line): a verdict line
+#   PROCEED | CHANGE: <one line> | STOP: <one line>
+# then at most --max-lines (default 12) lines of reasons, and at most --max-chars (default 1500,
+# MMO_ADVISE_MAX_CHARS) characters in all. Longer answers are trimmed, with a note. The full answer is
+# always saved as <name>.full.md next to --out (else in the state folder as advise-<moment>.full.md).
+#
+# Ceilings: MMO_ADVISE_BUDGET (default 6) consultations and MMO_ADVISE_BUDGET_CHARS (default 60000,
+# 0 = off) characters of brief sent, per session (MMO_SESSION, default today's date), counted in
+# -C/.mmo/advise.json behind a lock folder; evidence capped at MMO_ADVISE_EVIDENCE_CAP characters
+# (default 12000), the diff at MMO_ADVISE_DIFF_CAP (default 10000). Text that looks like a key is
+# refused before anything is sent.
+#
+# Exit codes: 0 advice | 2 usage, no lane, a lane with tools under --strict-no-tools, or refused input
+#             5 the lane answered with nothing | 10 over budget (count or characters)
+#             11 the answer had no verdict line | 3, 4, 6, 7, 8 passed through from mmo-run when the
+#             advisor lane failed (6 is the lane's own limit)
+# MMO_LOG=FILE appends one JSON line per consultation (kind "advise").
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python || true)"
+die() { echo "mmo-advise: $*" >&2; exit 2; }
+[ -n "$PY" ] || die "python3 (or python) is required"
+
+MOMENT=""; QUESTION=""; EVIDENCE=(); DIFF_REF=""; LANE=""; DIR="$PWD"; TIMEOUT=600; OUT=""
+MAX_LINES=12; MAX_CHARS="${MMO_ADVISE_MAX_CHARS:-1500}"; BUDGET="${MMO_ADVISE_BUDGET:-6}"
+BUDGET_CHARS="${MMO_ADVISE_BUDGET_CHARS:-60000}"; STATE=""; STRICT=""; STATUS=""
+[ "${MMO_ADVISE_STRICT:-}" = 1 ] && STRICT=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --moment) MOMENT="${2:-}"; shift 2 ;;
+    --question) QUESTION="${2:-}"; shift 2 ;;
+    --evidence) EVIDENCE+=("${2:-}"); shift 2 ;;
+    --diff) DIFF_REF="${2:-}"; shift 2 ;;
+    --lane) LANE="${2:-}"; shift 2 ;;
+    -C) DIR="${2:-}"; shift 2 ;;
+    -t) TIMEOUT="${2:-}"; shift 2 ;;
+    --out) OUT="${2:-}"; shift 2 ;;
+    --max-lines) MAX_LINES="${2:-}"; shift 2 ;;
+    --max-chars) MAX_CHARS="${2:-}"; shift 2 ;;
+    --budget) BUDGET="${2:-}"; shift 2 ;;
+    --budget-chars) BUDGET_CHARS="${2:-}"; shift 2 ;;
+    --strict-no-tools) STRICT=1; shift ;;
+    status) STATUS=1; shift ;;
+    --state) STATE="${2:-}"; shift 2 ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+case "$TIMEOUT$MAX_LINES$MAX_CHARS$BUDGET$BUDGET_CHARS" in *[!0-9]*|"") die "-t, --max-lines, --max-chars, --budget and --budget-chars take whole numbers" ;; esac
+SESSION="${MMO_SESSION:-$(date +%Y-%m-%d)}"
+case "$SESSION" in *[!A-Za-z0-9._-]*|"") die "MMO_SESSION may hold letters, digits, dot, dash and underscore only" ;; esac
+if [ -n "$STATUS" ]; then
+  [ -d "$DIR" ] || die "-C $DIR is not a directory"
+  [ -n "$STATE" ] || STATE="$DIR/.mmo/advise.json"
+  exec "$PY" "$HERE/mmo_advise.py" budget status --state "$STATE" --session "$SESSION" --budget "$BUDGET" --budget-chars "$BUDGET_CHARS"
+fi
+case "$MOMENT" in plan|stuck|done) ;; *) die "--moment must be plan, stuck or done" ;; esac
+[ -n "$QUESTION" ] && [ -s "$QUESTION" ] || die "--question must name a non-empty file"
+[ -d "$DIR" ] || die "-C $DIR is not a directory"
+[ "$MAX_LINES" -ge 1 ] && [ "$MAX_LINES" -le 40 ] || die "--max-lines must be between 1 and 40"
+for e in ${EVIDENCE[@]+"${EVIDENCE[@]}"}; do
+  f="${e#head:}"; f="${f#tail:}"
+  [ -f "$f" ] || die "evidence file not found: $f"
+done
+[ "$MOMENT" = stuck ] && [ ${#EVIDENCE[@]} -eq 0 ] && die "stuck needs the error output: --evidence FILE"
+[ "$MOMENT" = done ] && [ -z "$DIFF_REF" ] && [ ${#EVIDENCE[@]} -eq 0 ] && die "done needs the change: --diff REF or --evidence FILE"
+[ -n "$STATE" ] || STATE="$DIR/.mmo/advise.json"
+
+# What each lane is: the READ-ONLY column of mmo-run --list (notools = no tools at all).
+# Read once, here: lane_kind runs in subshells, which could not keep a lazy cache.
+LISTING="$(timeout 60 bash "$HERE/mmo-run" --list 2>/dev/null || true)"
+lane_kind() { # lane spec -> notools | sandbox | throwaway | unknown
+  local k; k="$(printf '%s\n' "$LISTING" | awk -v p="${1%%:*}" '$1 == p { print $4; exit }')"
+  echo "${k:-unknown}"
+}
+
+# Which advisor. Only lanes the user named, directly or through the roster they set up.
+SRC=""
+if [ -n "$LANE" ]; then SRC="--lane"
+elif [ -n "${MMO_ADVISOR:-}" ]; then LANE="$MMO_ADVISOR"; SRC="MMO_ADVISOR"
+else
+  ROSTER=""
+  if [ -f "$HERE/mmo-roster" ]; then ROSTER="$HERE/mmo-roster"
+  elif command -v mmo-roster >/dev/null 2>&1; then ROSTER="$(command -v mmo-roster)"; fi
+  if [ -n "$ROSTER" ]; then
+    CANDS="$(timeout 60 bash "$ROSTER" ready --tier strong 2>/dev/null | grep -v '^[[:space:]]*#' | grep '[^[:space:]]' \
+      | awk '{ if (NF >= 2 && $1 !~ /:/) print $1 ":" $2; else print $1 }' || true)"
+    LANE="$(printf '%s\n' "$CANDS" | head -1)"
+    # A lane with no tools is a guarantee, not a request: take the first such lane when one is ready.
+    while IFS= read -r c; do
+      [ -n "$c" ] && [ "$(lane_kind "$c")" = notools ] && { LANE="$c"; break; }
+    done <<< "$CANDS"
+    SRC="mmo-roster"
+  fi
+fi
+[ -n "$LANE" ] || die "no advisor lane: pass --lane provider:model or set MMO_ADVISOR (mmo-roster found no ready strong lane, or is not installed)"
+case "$LANE" in *[!A-Za-z0-9_.:/@-]*) die "advisor lane '$LANE' (from $SRC) has characters a lane name cannot have" ;; esac
+PROV="${LANE%%:*}"; MODEL=""; [ "$PROV" != "$LANE" ] && MODEL="${LANE#*:}"
+[ -f "$HERE/providers/$PROV.sh" ] || die "advisor lane '$LANE' (from $SRC) names no known provider; pass --lane or set MMO_ADVISOR (mmo-run --list shows the providers)"
+KIND="$(lane_kind "$LANE")"
+if [ "$KIND" = notools ]; then TOOLS="none"; else TOOLS="read-only, empty folder"; fi
+if [ -n "$STRICT" ] && [ "$KIND" != notools ]; then
+  die "--strict-no-tools: advisor lane '$LANE' (from $SRC) has tools (read-only kind: $KIND), so it can only be held to an empty folder. Use a lane with no tools, for example api:<endpoint>:<model> (mmo-run --list shows READ-ONLY notools)."
+fi
+echo "mmo-advise: advisor $LANE (from $SRC), moment $MOMENT, tools=$TOOLS" >&2
+
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+args=(brief --moment "$MOMENT" --question "$QUESTION" --templates "$HERE/../templates" --out "$TMP/brief.md"
+      --max-lines "$MAX_LINES" --max-chars "$MAX_CHARS" --evidence-cap "${MMO_ADVISE_EVIDENCE_CAP:-12000}" --diff-cap "${MMO_ADVISE_DIFF_CAP:-10000}")
+for e in ${EVIDENCE[@]+"${EVIDENCE[@]}"}; do args+=(--evidence "$e"); done
+if [ -n "$DIFF_REF" ]; then
+  git -C "$DIR" diff "$DIFF_REF" -- > "$TMP/diff" 2> "$TMP/differr" \
+    || die "git diff $DIFF_REF failed in $DIR: $(head -1 "$TMP/differr")"
+  args+=(--diff-file "$TMP/diff" --diff-ref "$DIFF_REF")
+fi
+BRIEF_CHARS="$("$PY" "$HERE/mmo_advise.py" "${args[@]}")" || exit 2
+
+# Reserve the consultation and its characters before the lane is called, under a lock; give them
+# back below if the lane never started. Exit 10 means over budget (the lane's own limit is 6).
+bargs=(--state "$STATE" --session "$SESSION" --budget "$BUDGET" --budget-chars "$BUDGET_CHARS" --moment "$MOMENT" --chars "$BRIEF_CHARS")
+"$PY" "$HERE/mmo_advise.py" budget take "${bargs[@]}" >/dev/null || exit $?
+
+log() { # status, verdict, seconds
+  [ -n "${MMO_LOG:-}" ] || return 0
+  mkdir -p "$(dirname "$MMO_LOG")" 2>/dev/null
+  printf '{"ts":"%s","kind":"advise","moment":"%s","lane":"%s","status":"%s","verdict":"%s","seconds":%s,"session":"%s","task":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$MOMENT" "$LANE" "$1" "$2" "$3" "$SESSION" "${MMO_TASK:-}" >> "$MMO_LOG"
+}
+write_out() { # status, exit, seconds, verdict, trimmed, body file
+  [ -n "$OUT" ] || return 0
+  mkdir -p "$(dirname "$OUT")"
+  { echo "<!-- mmo-advise moment=$MOMENT lane=$LANE tools=\"$TOOLS\" status=$1 exit=$2 seconds=$3 verdict=$4 trimmed=$5 -->"
+    [ -n "$6" ] && cat "$6"; } > "$OUT"
+}
+
+# An empty folder, so the advisor has nothing to read but the brief and nothing to change.
+mkdir -p "$TMP/ws"
+margs=("$PROV"); [ -n "$MODEL" ] && margs+=(-m "$MODEL")
+start=$(date +%s)
+bash "$HERE/mmo-run" "${margs[@]}" -e "${MMO_ADVISE_EFFORT:-high}" --mode ro -C "$TMP/ws" -t "$TIMEOUT" \
+  --brief "$TMP/brief.md" --out "$TMP/raw.md" 2> "$TMP/runlog"
+rc=$?
+secs=$(( $(date +%s) - start ))
+
+if [ $rc -ne 0 ]; then
+  st="$(head -1 "$TMP/raw.md" 2>/dev/null | sed -n 's/.*status=\([a-z_]*\).*/\1/p')"; st="${st:-failed}"
+  # A lane that never started (limit, sign-in, model id, usage) spent nothing: give the call back.
+  case $rc in 2|6|7|8) "$PY" "$HERE/mmo_advise.py" budget refund "${bargs[@]}" >/dev/null ;; esac
+  log "$st" none "$secs"
+  write_out "$st" "$rc" "$secs" none no ""
+  echo "mmo-advise: advisor lane $LANE failed: status=$st exit=$rc. No advice; decide on your own or try another strong lane." >&2
+  tail -n 3 "$TMP/runlog" | sed 's/^/  /' >&2
+  exit $rc
+fi
+
+tail -n +2 "$TMP/raw.md" > "$TMP/answer.md"
+# The full answer is always kept, so a trimmed one loses nothing.
+if [ -n "$OUT" ]; then FULL="${OUT%.*}.full.md"; else FULL="$(dirname "$STATE")/advise-$MOMENT.full.md"; fi
+res="$("$PY" "$HERE/mmo_advise.py" parse --answer "$TMP/answer.md" --max-lines "$MAX_LINES" --max-chars "$MAX_CHARS" --full "$FULL" --out "$TMP/advice.md")"
+if [ $? -ne 0 ]; then
+  log unusable none "$secs"
+  write_out unusable 11 "$secs" none no ""
+  echo "mmo-advise: the advisor's answer has no verdict line (PROCEED, CHANGE: ..., STOP: ...); unusable, not passed on." >&2
+  exit 11
+fi
+verdict="${res%%$'\t'*}"; trimmed="${res##*$'\t'}"
+log ok "$verdict" "$secs"
+write_out ok 0 "$secs" "$verdict" "$trimmed" "$TMP/advice.md"
+cat "$TMP/advice.md"
+[ "$trimmed" = yes ] && echo "mmo-advise: the answer was trimmed (see the notes at the end)" >&2
+exit 0

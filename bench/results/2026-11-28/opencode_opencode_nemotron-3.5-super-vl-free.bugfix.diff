@@ -1,0 +1,40 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..eb94275 100644
+--- a/durations.py
++++ b/durations.py
+@@ -1,7 +1,11 @@
+ """Duration parsing used by the scheduler."""
+ 
++import re
++
+ UNITS = {"h": 3600, "m": 60, "s": 1}
+ 
++_PATTERN = re.compile(r"^((?P<h>\d+)h)?((?P<m>\d+)m)?((?P<s>\d+)s)?$")
++
+ 
+ def parse_duration(text):
+     """Return the number of seconds in a duration like "1h30m15s".
+@@ -14,14 +18,14 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not text:
++        raise ValueError("empty duration is invalid")
++    match = _PATTERN.match(text)
++    if match is None:
++        raise ValueError(f"bad duration {text!r}")
+     total = 0
+-    num = ""
+-    for ch in text:
+-        if ch.isdigit():
+-            num += ch
+-        elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
+-            num = ""
+-        else:
+-            raise ValueError(f"bad character {ch!r}")
++    for unit in ("h", "m", "s"):
++        value = match.group(unit)
++        if value:
++            total += int(value) * UNITS[unit]
+     return total

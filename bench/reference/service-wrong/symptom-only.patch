@@ -1,0 +1,50 @@
+diff -ru a/roombook/parse/csvimport.py b/roombook/parse/csvimport.py
+--- a/roombook/parse/csvimport.py	2026-11-28 16:09:38.262158300 +0300
++++ b/roombook/parse/csvimport.py	2026-11-28 16:09:38.335732600 +0300
+@@ -81,8 +81,8 @@
+         result.rows.append({
+             "room": room,
+             # ISO form, as the spreadsheet's own audit export writes it.
+-            "starts_at": start.isoformat(timespec="minutes"),
+-            "ends_at": end.isoformat(timespec="minutes"),
++            "starts_at": start.strftime("%Y-%m-%d %H:%M"),
++            "ends_at": end.strftime("%Y-%m-%d %H:%M"),
+             "owner": organiser,
+             "title": subject,
+             "source": "import",
+diff -ru a/roombook/store/bookings.py b/roombook/store/bookings.py
+--- a/roombook/store/bookings.py	2026-11-28 16:09:38.271558700 +0300
++++ b/roombook/store/bookings.py	2026-11-28 16:09:38.370554600 +0300
+@@ -36,7 +36,7 @@
+                 c = self.conn.execute(
+                     "INSERT INTO bookings(room, starts_at, ends_at, owner, title, source, attendees, series_id) "
+                     "VALUES (?, ?, ?, ?, ?, 'series', ?, ?)",
+-                    (b.room, to_db(b.start), to_db(b.end), b.owner, b.title, b.attendees, sid))
++                    (b.room, b.start.isoformat(" "), b.end.isoformat(" "), b.owner, b.title, b.attendees, sid))
+                 b.id = c.lastrowid
+         return sid
+ 
+@@ -47,7 +47,6 @@
+         on the old kiosk machines.
+         """
+         # Whatever form the rows carry, the table holds one timestamp format (see codec).
+-        rows = [{**r, "starts_at": canonical(r["starts_at"]), "ends_at": canonical(r["ends_at"])} for r in rows]
+         with self.conn:
+             self.conn.executemany(
+                 "INSERT INTO bookings(room, starts_at, ends_at, owner, title, source, attendees) "
+diff -ru a/roombook/store/migrate.py b/roombook/store/migrate.py
+--- a/roombook/store/migrate.py	2026-11-28 16:09:38.273560000 +0300
++++ b/roombook/store/migrate.py	2026-11-28 16:09:38.378288200 +0300
+@@ -87,12 +87,6 @@
+     conn.execute("ALTER TABLE bookings ADD COLUMN cancel_reason TEXT NOT NULL DEFAULT ''")
+     # Imported rows were stored as 'YYYY-MM-DDTHH:MM' and series rows with seconds; SQL compares
+     # the text, so those rows slipped past the overlap checks. Rewrite them in the one format.
+-    from .codec import canonical
+-    rows = conn.execute("SELECT id, starts_at, ends_at FROM bookings").fetchall()
+-    for r in rows:
+-        s, e = canonical(r[1]), canonical(r[2])
+-        if (s, e) != (r[1], r[2]):
+-            conn.execute("UPDATE bookings SET starts_at = ?, ends_at = ? WHERE id = ?", (s, e, r[0]))
+ 
+ 
+ STEPS = {1: _v1_to_v2, 2: _v2_to_v3}

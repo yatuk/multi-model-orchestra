@@ -2,31 +2,107 @@
 # mmo-run: run one delegate lane on any model family and leave a checked result file.
 #
 #   mmo-run <provider> --brief FILE --out FILE [-m MODEL] [-e EFFORT] [--mode ro|rw]
-#           [-C DIR] [-t SECONDS] [--allow-main]
+#           [-C DIR] [-t SECONDS] [--idle SECONDS] [--loop N] [--max-turns N] [--max-cost USD]
+#           [--base REF] [--allow-main]
+#   mmo-run --list            every lane this runner knows, and whether its CLI is installed
 #
-#   provider  codex | kimi | deepseek | claude
+#   provider  one file in providers/ (codex, kimi, deepseek, claude, ...); see --list
 #   --mode    ro (default): the lane may read, never write.
 #             rw: the lane may edit DIR, which must be a linked git worktree
 #                 (git worktree add ...), never your main checkout, unless --allow-main.
 #   -t        hard timeout in seconds (default 900); the lane is killed 10 s after.
+#   --idle    kill the lane when it has printed nothing for this many seconds (off by default;
+#             use it with lanes that stream their progress).
+#   --loop    kill the lane when the same tool call or error line repeats N times in a row (off at 0,
+#             the default). Only lanes that stream JSON lines are covered: a watcher reads the raw
+#             output every 5 seconds and compares lines that parse as JSON objects and name a tool
+#             call or an error (ids, timestamps and durations are ignored; text events in between do
+#             not reset the count, a different action does). Plain-text lanes are not covered.
+#   --max-turns  passed to CLIs that can cap agent turns; ignored by the others.
+#   --max-cost  per-run cost ceiling in USD, passed to CLIs with a real budget flag (the claude lanes,
+#             vibe); the other lanes ignore it and say so once on stderr. When a claude lane stops at the
+#             ceiling the run is status limit with ceiling=cost in the header; vibe's text output does
+#             not say why it stopped, so a stop there stays whatever the tool reports.
+#   --base    rw only: refuse to start unless the worktree contains this commit or branch.
+#             A lane that starts from the wrong base works on stale code.
 #
 # The out file starts with one header line, then the lane's final answer:
 #   <!-- mmo provider=codex model=gpt-6.1-sol mode=ro status=ok exit=0 seconds=41 -->
+# rw lanes add base=<commit> changed=<files touched> and committed=yes when the lane made a commit.
+# After those, only when the tool reported them (nothing is estimated): ceiling=cost, retry_after=<UTC
+# time a limited lane comes back, parsed from its message>, in=<tokens> out=<tokens> cached=<tokens>
+# cost=<USD> and served=<model, when it differs from the requested one>. The MMO_LOG line carries the
+# same as tokens_in, tokens_out, tokens_cached, cost_usd, served_model and retry_after.
 #
-# Exit codes: 0 ok | 2 usage | 3 failed | 4 timeout | 5 empty answer | 6 limit or no credit
-#             7 not signed in (run the CLI once interactively to sign in)
-#             8 model rejected (unknown or unsupported model id: switch id, do not wait)
+# Exit codes: 0 ok | 2 usage | 3 failed | 4 timeout, stalled or looping | 5 empty answer
+#             6 limit or no credit | 7 not signed in | 8 model rejected (switch id, do not wait)
+#             9 wrong base (the worktree does not contain --base)
+# API keys: KEY=value lines in ~/.config/mmo/keys.env (or the file MMO_KEYS_FILE names) are loaded in
+# the lane's own child shell only, so every lane sees them and the conductor, the brief and the out
+# file never do. mmo-run never prints the environment.
+# Set MMO_LOG=FILE to append one JSON line per run (and MMO_TASK=ID to label it); mmo-score sums them.
 # A non-zero exit means: do not use the answer. Error text never passes as an answer.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROVDIR="$HERE/providers"
 PY="$(command -v python3 || command -v python || true)"
 
-die() { echo "mmo-run: $*" >&2; exit 2; }
+# Keys live in one file outside any repository. Callers run this inside a subshell, so the keys
+# reach one lane (or one readiness test) and never the conductor's own environment.
+load_keys() {
+  local f="${MMO_KEYS_FILE:-$HOME/.config/mmo/keys.env}"
+  if [ -f "$f" ]; then
+    set -a
+    . "$f" 2>/dev/null || true
+    set +a
+  fi
+  return 0
+}
 
-[ $# -ge 1 ] || die "usage: mmo-run <codex|kimi|deepseek|claude> --brief FILE --out FILE [-m MODEL] [-e EFFORT] [--mode ro|rw] [-C DIR] [-t SECONDS]"
+# A key file that exists but does not source is skipped with one warning naming it, never its contents.
+# Checked in a subshell of the conductor shell, because the lane's own stderr goes to the error file.
+check_keys() {
+  local f="${MMO_KEYS_FILE:-$HOME/.config/mmo/keys.env}"
+  [ -f "$f" ] || return 0
+  ( set -a; . "$f" ) >/dev/null 2>&1 || echo "mmo-run: warning: could not load key file $f (syntax error?); continuing without its keys" >&2
+  return 0
+}
+
+die() { echo "mmo-run: $*" >&2; exit 2; }
+providers() { for f in "$PROVDIR"/*.sh; do basename "$f" .sh; done; }
+
+# Load one provider file with clean defaults. A provider sets LANE_* and defines lane_cmd.
+load_provider() {
+  LANE_BIN=""; LANE_DEFAULT_MODEL=""; LANE_FAMILY=""; LANE_RO=sandbox; LANE_EXTRACT=text
+  LANE_VERIFIED=docs; LANE_NOTE=""; LANE_PROMPT=arg; LANE_MAX_COST=""
+  unset -f lane_cmd lane_env lane_model lane_ready 2>/dev/null
+  # shellcheck disable=SC1090
+  . "$PROVDIR/$1.sh"
+}
+
+if [ "${1:-}" = "--list" ]; then
+  # Build the whole table first and print it once: a reader that closes the pipe (| head -3)
+  # then costs one quiet failed write, not a "write error" line per row.
+  fmt='%-16s %-7s %-10s %-10s %-12s %s\n'
+  table="$(
+    printf "$fmt" LANE CLI FAMILY READ-ONLY CHECKED "DEFAULT MODEL"
+    for p in $(providers); do (
+      load_provider "$p"
+      if ! command -v "$LANE_BIN" >/dev/null 2>&1; then have=absent
+      elif declare -F lane_ready >/dev/null && ! ( load_keys; lane_ready ); then have=setup
+      else have=ok; fi
+      printf "$fmt" "$p" "$have" "$LANE_FAMILY" "$LANE_RO" "$LANE_VERIFIED" "$LANE_DEFAULT_MODEL"
+    ); done
+  )"
+  { printf '%s\n' "$table"; } 2>/dev/null || true
+  exit 0
+fi
+
+[ $# -ge 1 ] || die "usage: mmo-run <provider> --brief FILE --out FILE [-m MODEL] [-e EFFORT] [--mode ro|rw] [-C DIR] [-t SECONDS] (mmo-run --list shows the providers)"
 PROVIDER="$1"; shift
 MODEL=""; EFFORT=""; MODE="ro"; DIR="$PWD"; TIMEOUT=900; BRIEF=""; OUT=""; ALLOW_MAIN=0
+IDLE=0; LOOP=0; MAX_TURNS=""; BASE=""; MAX_COST=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -m) MODEL="$2"; shift 2 ;;
@@ -34,6 +110,11 @@ while [ $# -gt 0 ]; do
     --mode) MODE="$2"; shift 2 ;;
     -C) DIR="$2"; shift 2 ;;
     -t) TIMEOUT="$2"; shift 2 ;;
+    --idle) IDLE="$2"; shift 2 ;;
+    --loop) LOOP="$2"; shift 2 ;;
+    --max-turns) MAX_TURNS="$2"; shift 2 ;;
+    --max-cost) MAX_COST="$2"; shift 2 ;;
+    --base) BASE="$2"; shift 2 ;;
     --brief) BRIEF="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --allow-main) ALLOW_MAIN=1; shift ;;
@@ -41,24 +122,33 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+case "$PROVIDER" in *[!a-z0-9_-]*|"") die "unknown provider: $PROVIDER" ;; esac
+[ -f "$PROVDIR/$PROVIDER.sh" ] || die "unknown provider: $PROVIDER (known: $(providers | tr '\n' ' '))"
 [ -n "$BRIEF" ] && [ -s "$BRIEF" ] || die "--brief must name a non-empty file"
 [ -n "$OUT" ] || die "--out is required"
 [ -d "$DIR" ] || die "-C $DIR is not a directory"
 case "$MODE" in ro|rw) ;; *) die "--mode must be ro or rw" ;; esac
+case "$TIMEOUT$IDLE" in *[!0-9]*) die "-t and --idle take whole seconds" ;; esac
+case "$LOOP" in *[!0-9]*|"") die "--loop takes a whole number (0 = off)" ;; esac
 [ -n "$PY" ] || die "python3 (or python) is required to read lane output"
 
-# Default model per provider: the cheapest tier that is still a sensible default.
-if [ -z "$MODEL" ]; then
-  case "$PROVIDER" in
-    codex) MODEL="gpt-6.1-sol" ;;
-    kimi) MODEL="kimi-code/k3.1-pro" ;;
-    deepseek) MODEL="deepseek/deepseek-v4-pro" ;;
-    claude) MODEL="sonnet" ;;
-    *) die "unknown provider: $PROVIDER" ;;
-  esac
-fi
-[ "$PROVIDER" = deepseek ] && case "$MODEL" in deepseek/*) ;; *) MODEL="deepseek/$MODEL" ;; esac
+load_provider "$PROVIDER"
+[ -z "$MODEL" ] && MODEL="$LANE_DEFAULT_MODEL"
+declare -F lane_model >/dev/null && lane_model
 [ -z "$EFFORT" ] && EFFORT="medium"
+[ "$MODE" = rw ] && [ "$LANE_RO" = notools ] && die "$PROVIDER has no tools: it can answer (--mode ro) but cannot edit files"
+command -v "$LANE_BIN" >/dev/null || die "$LANE_BIN CLI not found ($LANE_NOTE)"
+# --max-cost: a positive number; lanes without a budget flag drop it, once, so nobody thinks it was enforced.
+if [ -n "$MAX_COST" ]; then
+  case "$MAX_COST" in
+    *[!0-9.]*|""|.|*.*.*) die "--max-cost takes a positive number of US dollars, for example 0.50" ;;
+  esac
+  case "$MAX_COST" in *[1-9]*) ;; *) die "--max-cost takes a positive number of US dollars, for example 0.50" ;; esac
+  if [ -z "$LANE_MAX_COST" ]; then
+    echo "mmo-run: note: $PROVIDER has no cost ceiling; --max-cost $MAX_COST is not enforced for this run" >&2
+    MAX_COST=""
+  fi
+fi
 
 # Write lanes only in a linked worktree: a lane can never touch your main checkout by accident.
 if [ "$MODE" = rw ] && [ "$ALLOW_MAIN" -eq 0 ]; then
@@ -69,86 +159,157 @@ if [ "$MODE" = rw ] && [ "$ALLOW_MAIN" -eq 0 ]; then
   esac
 fi
 
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+RAW="$TMP/raw"; ERR="$TMP/err"; ANS="$TMP/answer"; PROMPT_FILE="$TMP/prompt"
+: > "$RAW"; : > "$ERR"
+
+write_out() { # status, the CLI's exit code, seconds, extra header fields
+  mkdir -p "$(dirname "$OUT")"
+  {
+    echo "<!-- mmo provider=$PROVIDER model=$MODEL mode=$MODE status=$1 exit=$2 seconds=$3$4 -->"
+    if [ "$1" = ok ]; then cat "$ANS"; [ -n "$(tail -c1 "$ANS")" ] && echo
+    else
+      echo "LANE DID NOT PRODUCE A USABLE ANSWER ($1). Last stderr lines:"
+      tail -n 15 "$ERR" 2>/dev/null
+    fi
+  } > "$OUT"
+}
+
+# The base check: a lane whose worktree lacks the conductor's branch works on stale code.
+EXTRA=""; HEAD0=""
+if [ "$MODE" = rw ] && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  HEAD0="$(git -C "$DIR" rev-parse HEAD 2>/dev/null || true)"
+  EXTRA=" base=${HEAD0:0:9}"
+  if [ -n "$BASE" ] && ! git -C "$DIR" merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then
+    echo "worktree $DIR does not contain $BASE; the lane was not started" > "$ERR"
+    write_out base 0 0 "$EXTRA"
+    echo "mmo-run: $PROVIDER/$MODEL rw -> base: $DIR does not contain $BASE ($OUT)" >&2
+    exit 9
+  fi
+fi
+
 PROMPT="$(cat "$BRIEF")"
 if [ "$MODE" = ro ]; then
   PROMPT="READ-ONLY LANE: do not create, edit or delete any file, and do not run commands that change state. Answer in your final message.
 
 $PROMPT"
 fi
+printf '%s' "$PROMPT" > "$PROMPT_FILE"
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-RAW="$TMP/raw"; ERR="$TMP/err"; ANS="$TMP/answer"
-start=$(date +%s); RO_VIOLATION=0
+# A CLI without a read-only mode gets a throwaway detached worktree (or an empty folder
+# outside git) for read-only runs; whatever it writes there is discarded and reported.
+RUNDIR="$DIR"; RO_VIOLATION=0
+if [ "$MODE" = ro ] && [ "$LANE_RO" = throwaway ]; then
+  if git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 \
+     && git -C "$DIR" worktree add -q --detach "$TMP/ro-wt" HEAD 2>>"$ERR"; then
+    RUNDIR="$TMP/ro-wt"
+  else
+    RUNDIR="$TMP/ro-empty"; mkdir -p "$RUNDIR"
+  fi
+fi
 
-case "$PROVIDER" in
-  codex)
-    command -v codex >/dev/null || die "codex CLI not found"
-    if [ "$MODE" = rw ]; then SANDBOX=(--approve-for-me); else SANDBOX=(-s read-only); fi
-    timeout -k 10 "$TIMEOUT" codex exec --skip-git-repo-check -C "$DIR" -m "$MODEL" \
-      -c model_reasoning_effort="$EFFORT" "${SANDBOX[@]}" -o "$ANS" "$PROMPT" \
-      < /dev/null > "$RAW" 2> "$ERR"
-    code=$?
-    ;;
-  kimi|deepseek)
-    command -v kimi >/dev/null || die "kimi CLI not found"
-    # kimi -p runs tools and edits files without asking, and has no read-only sandbox.
-    # So a read-only lane runs in a throwaway detached worktree (or an empty dir outside git),
-    # and any file it changed there is discarded and reported.
-    RUNDIR="$DIR"
-    if [ "$MODE" = ro ]; then
-      if git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 \
-         && git -C "$DIR" worktree add -q --detach "$TMP/ro-wt" HEAD 2>>"$ERR"; then
-        RUNDIR="$TMP/ro-wt"
-      else
-        RUNDIR="$TMP/ro-empty"; mkdir -p "$RUNDIR"
+CMD=()
+lane_cmd
+[ ${#CMD[@]} -gt 0 ] || die "provider $PROVIDER built no command"
+STDIN=/dev/null; [ "$LANE_PROMPT" = stdin ] && STDIN="$PROMPT_FILE"
+
+check_keys
+start=$(date +%s)
+(
+  cd "$RUNDIR" || exit 2
+  load_keys
+  if declare -F lane_env >/dev/null; then lane_env; fi
+  exec timeout -k 10 "$TIMEOUT" "${CMD[@]}"
+) < "$STDIN" > "$RAW" 2> "$ERR" &
+pid=$!
+
+# Idle watchdog: a lane that prints nothing for --idle seconds is stuck, not thinking.
+STALLED="$TMP/stalled"
+if [ "$IDLE" -gt 0 ]; then
+  (
+    last="$(cat "$RAW" "$ERR" 2>/dev/null | wc -c)"; quiet=0
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 5; now="$(cat "$RAW" "$ERR" 2>/dev/null | wc -c)"
+      if [ "$now" = "$last" ]; then quiet=$((quiet + 5)); else quiet=0; last="$now"; fi
+      if [ "$quiet" -ge "$IDLE" ]; then
+        : > "$STALLED"; kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
       fi
-    fi
-    ( cd "$RUNDIR" && timeout -k 10 "$TIMEOUT" kimi -m "$MODEL" -p "$PROMPT" --output-format stream-json ) \
-      < /dev/null > "$RAW" 2> "$ERR"
-    code=$?
-    if [ "$RUNDIR" = "$TMP/ro-wt" ]; then
-      [ -n "$(git -C "$RUNDIR" status --porcelain 2>/dev/null)" ] && RO_VIOLATION=1
-      git -C "$DIR" worktree remove --force "$RUNDIR" 2>/dev/null
-    elif [ "$RUNDIR" = "$TMP/ro-empty" ] && [ -n "$(ls -A "$RUNDIR")" ]; then
-      RO_VIOLATION=1
-    fi
-    [ $code -eq 0 ] && "$PY" "$HERE/mmo_extract.py" kimi "$RAW" > "$ANS" 2>> "$ERR" || true
-    ;;
-  claude)
-    command -v claude >/dev/null || die "claude CLI not found"
-    if [ "$MODE" = rw ]; then PERM=(--permission-mode acceptEdits); else PERM=(--tools Read Glob Grep --permission-mode dontAsk); fi
-    ( cd "$DIR" && timeout -k 10 "$TIMEOUT" claude -p --model "$MODEL" --output-format json "${PERM[@]}" "$PROMPT" ) \
-      < /dev/null > "$RAW" 2> "$ERR"
-    code=$?
-    # Claude reports failures inside the JSON (is_error); surface its message either way.
-    "$PY" "$HERE/mmo_extract.py" claude "$RAW" > "$ANS" 2>> "$ERR" || { [ $code -eq 0 ] && code=1; }
-    ;;
-  *) die "unknown provider: $PROVIDER" ;;
-esac
+    done
+  ) &
+  watcher=$!
+fi
+
+# Loop watchdog: a lane that streams JSON and keeps repeating the same tool call or error is
+# spinning, not working. mmo_loop.py does the comparison (exit 10 = looping).
+LOOPING="$TMP/looping"
+if [ "$LOOP" -gt 0 ]; then
+  (
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 5
+      "$PY" "$HERE/mmo_loop.py" "$LOOP" "$RAW" >/dev/null 2>&1; lc=$?
+      if [ $lc -eq 10 ]; then
+        : > "$LOOPING"; kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
+      fi
+    done
+  ) &
+  loopwatcher=$!
+fi
+wait "$pid"; code=$?
+if [ "$IDLE" -gt 0 ]; then kill "$watcher" 2>/dev/null; wait "$watcher" 2>/dev/null; fi
+if [ "$LOOP" -gt 0 ]; then kill "$loopwatcher" 2>/dev/null; wait "$loopwatcher" 2>/dev/null; fi
 secs=$(( $(date +%s) - start ))
 
+if [ "$RUNDIR" = "$TMP/ro-wt" ]; then
+  [ -n "$(git -C "$RUNDIR" status --porcelain 2>/dev/null)" ] && RO_VIOLATION=1
+  git -C "$DIR" worktree remove --force "$RUNDIR" 2>/dev/null
+elif [ "$RUNDIR" = "$TMP/ro-empty" ] && [ -n "$(ls -A "$RUNDIR")" ]; then
+  RO_VIOLATION=1
+fi
+
+# The final answer: written by the CLI itself, the plain output, or pulled from its JSON.
+if [ "$LANE_EXTRACT" != answer-file ]; then
+  "$PY" "$HERE/mmo_extract.py" "$LANE_EXTRACT" "$RAW" > "$ANS" 2>> "$ERR"; xc=$?
+  # Exit 3 from the extractor: the CLI exited 0 but reported an error inside its output.
+  [ $xc -eq 3 ] && [ $code -eq 0 ] && code=1
+fi
+
 status=ok; rc=0
-if [ $code -eq 124 ] || [ $code -eq 137 ]; then status=timeout; rc=4
+if [ -e "$STALLED" ]; then status=stalled; rc=4
+elif [ -e "$LOOPING" ]; then status=looping; rc=4
+elif [ $code -eq 124 ] || [ $code -eq 137 ]; then status=timeout; rc=4
 elif [ $code -ne 0 ]; then
   # Match only the CLI's own error lines, never the brief echoed into stderr.
-  printf '%s' "$PROMPT" > "$TMP/prompt"
-  status="$("$PY" "$HERE/mmo_classify.py" "$PROVIDER" "$TMP/prompt" "$ERR" "$RAW" 2>/dev/null || echo failed)"
+  status="$("$PY" "$HERE/mmo_classify.py" "$PROVIDER" "$PROMPT_FILE" "$ERR" "$RAW" 2>/dev/null || echo failed)"
   case "$status" in
     model) rc=8 ;; limit) rc=6 ;; auth) rc=7 ;; *) status=failed; rc=3 ;;
   esac
 elif [ ! -s "$ANS" ] || ! grep -q '[^[:space:]]' "$ANS"; then status=empty; rc=5
 fi
 
-mkdir -p "$(dirname "$OUT")"
-{
-  echo "<!-- mmo provider=$PROVIDER model=$MODEL mode=$MODE status=$status exit=$code seconds=$secs$([ $RO_VIOLATION -eq 1 ] && echo " ro_violation=yes") -->"
-  if [ $rc -eq 0 ]; then cat "$ANS"; [ -n "$(tail -c1 "$ANS")" ] && echo
-  else
-    echo "LANE DID NOT PRODUCE A USABLE ANSWER ($status). Last stderr lines:"
-    tail -n 15 "$ERR" 2>/dev/null
-  fi
-} > "$OUT"
+if [ -n "$HEAD0" ]; then
+  EXTRA="$EXTRA changed=$(git -C "$DIR" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$(git -C "$DIR" rev-parse HEAD 2>/dev/null)" != "$HEAD0" ] && EXTRA="$EXTRA committed=yes"
+fi
+[ $RO_VIOLATION -eq 1 ] && EXTRA="$EXTRA ro_violation=yes"
+# What the tool itself reported (never estimated), when it stopped at the cost ceiling, and when a
+# limited lane comes back. Each helper prints nothing it does not know, and a helper failure adds nothing.
+USAGE_H=""; USAGE_L=""; CEILING=""; RETRY=""; LOGX=""
+{ IFS= read -r USAGE_H; IFS= read -r USAGE_L; IFS= read -r CEILING; } < <("$PY" "$HERE/mmo_usage.py" "$PROVIDER" "$RAW" "$MODEL" "$TMP/api-usage.json" 2>/dev/null)
+if [ "$CEILING" = cost ] && [ -n "$MAX_COST" ] && { [ "$status" = failed ] || [ "$status" = empty ]; }; then
+  status=limit; rc=6; EXTRA="$EXTRA ceiling=cost"
+elif [ "$status" = limit ]; then
+  RETRY="$("$PY" "$HERE/mmo_limit.py" "$PROVIDER" "$PROMPT_FILE" "$ERR" "$RAW" 2>/dev/null || true)"
+  if [ -n "$RETRY" ]; then EXTRA="$EXTRA retry_after=$RETRY"; LOGX="$LOGX,\"retry_after\":\"$RETRY\""; fi
+fi
+EXTRA="$EXTRA$USAGE_H"; LOGX="$LOGX$USAGE_L"
+write_out "$status" "$code" "$secs" "$EXTRA"
+# Scoreboard: one JSON line per run when MMO_LOG names a file (mmo-score reads it).
+if [ -n "${MMO_LOG:-}" ]; then
+  mkdir -p "$(dirname "$MMO_LOG")" 2>/dev/null
+  printf '{"ts":"%s","kind":"run","provider":"%s","model":"%s","mode":"%s","status":"%s","seconds":%s,"task":"%s"%s}
+'     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PROVIDER" "$MODEL" "$MODE" "$status" "$secs" "${MMO_TASK:-}" "$LOGX" >> "$MMO_LOG"
+fi
 [ $RO_VIOLATION -eq 1 ] && echo "mmo-run: WARNING read-only lane changed files (discarded)" >&2
 echo "mmo-run: $PROVIDER/$MODEL $MODE -> $status in ${secs}s ($OUT)" >&2
 exit $rc

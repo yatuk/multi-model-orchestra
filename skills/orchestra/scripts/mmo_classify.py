@@ -15,12 +15,21 @@ import sys
 
 MODEL = re.compile(
     r"model_not_found|model is not supported|model .{0,80}not supported|unknown model|"
-    r"invalid model|model .{0,80}(does not exist|not found)|no such model", re.I)
+    r"invalid model|model unavailable|model .{0,80}is not available|model .{0,80}(does not exist|not found)|no such model|cannot use this model|code 1211\b|requires specifying a model", re.I)
 LIMIT = re.compile(
     r"insufficient balance|\b402\b|quota|usage limit|rate.?limit|\b429\b|exceeded your|"
     r"does not have access|upgrade to", re.I)
 AUTH = re.compile(
-    r"authenticat|not logged in|log in|sign in|unauthorized|\b401\b|session expired", re.I)
+    r"authenticat|not logged in|log in|sign in|unauthorized|\b401\b|session expired|no api key", re.I)
+# A CLI that starts a sign-in flow is not signed in, whatever else it prints afterwards.
+SIGN_IN = re.compile(
+    r"waiting for authorization|you are not authenticated|to sign in, open|open this url in your browser|"
+    r"please run .{0,40}login|run `?\S+ (auth )?login`?", re.I)
+# Strings quoted from the docs or source of gemini, crush, aider and opencode (no sign-in word in them).
+EXTRA_AUTH = re.compile(
+    r"please set an auth method|no providers configured|unable to proceed without an? .{0,30}api key|"
+    r"is required to resolve the provider endpoint|no auth type is selected", re.I)
+EXTRA_LIMIT = re.compile(r"exhausted your capacity|capacity exceeded|model_capacity_exhausted|not included in your (weekly )?usage", re.I)
 CODEX_ERR = re.compile(
     r"^\s*(error|warning: stream|stream error|unexpected status|exceeded retry|turn\.failed|"
     r"\{|\[?error)", re.I)
@@ -42,9 +51,11 @@ def own_lines(provider, prompt, texts):
 
 def classify(provider, prompt, texts):
     body = own_lines(provider, prompt, texts)
+    if SIGN_IN.search(body) or EXTRA_AUTH.search(body):
+        return "auth"
     if MODEL.search(body):
         return "model"
-    if LIMIT.search(body):
+    if LIMIT.search(body) or EXTRA_LIMIT.search(body):
         return "limit"
     if AUTH.search(body):
         return "auth"

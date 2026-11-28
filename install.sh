@@ -15,7 +15,7 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 mkdir -p "$DEST"
-for s in orchestra council chatgpt-lane kimi-lane deepseek-lane otomode; do
+for s in orchestra council advisor chatgpt-lane kimi-lane deepseek-lane cloud-lane otomode; do
   if [ -e "$DEST/$s" ] && [ ! -L "$DEST/$s" ]; then
     echo "skip $s: $DEST/$s already exists (remove it first to replace)"; continue
   fi

@@ -1,0 +1,124 @@
+lane	task	score	seconds	detail
+opencode:opencode/beam-free	bugfix	1.00	21	visible ok, hidden 6/6
+opencode:opencode/beam-free	reasoning	1.00	8	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/beam-free	bulk	1.00	15	60/60 correct
+opencode:opencode/big-pickle	bugfix	1.00	34	visible ok, hidden 6/6
+opencode:opencode/big-pickle	reasoning	1.00	10	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/big-pickle	bulk	1.00	26	60/60 correct
+opencode:opencode/deepseek-v4.1-flash-free	bugfix	1.00	22	visible ok, hidden 6/6
+opencode:opencode/deepseek-v4.1-flash-free	reasoning	1.00	7	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/deepseek-v4.1-flash-free	bulk	1.00	10	60/60 correct
+opencode:opencode/flint-40b-free	bugfix	1.00	46	visible ok, hidden 6/6
+opencode:opencode/flint-40b-free	reasoning	1.00	53	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/flint-40b-free	bulk	1.00	156	60/60 correct
+opencode:opencode/hy4-flash-free	bugfix	1.00	55	visible ok, hidden 6/6
+opencode:opencode/hy4-flash-free	reasoning	1.00	12	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/hy4-flash-free	bulk	1.00	16	60/60 correct
+opencode:opencode/iceman-free	bugfix	1.00	41	visible ok, hidden 6/6
+opencode:opencode/iceman-free	reasoning	1.00	24	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/iceman-free	bulk	1.00	30	60/60 correct
+opencode:opencode/mimo-v2.6-flash-free	bugfix	1.00	80	visible ok, hidden 6/6
+opencode:opencode/mimo-v2.6-flash-free	reasoning	1.00	32	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/mimo-v2.6-flash-free	bulk	1.00	65	60/60 correct
+opencode:opencode/nemotron-3.5-lightning-free	bugfix	0.83	63	visible ok, hidden 5/6
+opencode:opencode/nemotron-3.5-lightning-free	reasoning	1.00	21	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/nemotron-3.5-lightning-free	bulk	1.00	34	60/60 correct
+opencode:opencode/nemotron-3.5-super-vl-free	bugfix	1.00	41	visible ok, hidden 6/6
+opencode:opencode/nemotron-3.5-super-vl-free	reasoning	1.00	13	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/nemotron-3.5-super-vl-free	bulk	1.00	35	60/60 correct
+opencode:opencode/seaglass-alpha-free	bugfix	1.00	94	visible ok, hidden 6/6
+opencode:opencode/seaglass-alpha-free	reasoning	1.00	18	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+opencode:opencode/seaglass-alpha-free	bulk	1.00	81	60/60 correct
+grok:grok-4.7	bugfix	1.00	50	visible ok, hidden 6/6
+grok:grok-4.7	reasoning	1.00	24	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+grok:grok-4.7	bulk	1.00	58	60/60 correct
+grok:grok-4.7-build-fast	bugfix	1.00	37	visible ok, hidden 6/6
+grok:grok-4.7-build-fast	reasoning	1.00	17	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+grok:grok-4.7-build-fast	bulk	1.00	28	60/60 correct
+grok:grok-4.6	bugfix	1.00	33	visible ok, hidden 6/6
+grok:grok-4.6	reasoning	1.00	15	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+grok:grok-4.6	bulk	1.00	23	60/60 correct
+grok:grok-4.5	bugfix	1.00	50	visible ok, hidden 6/6
+grok:grok-4.5	reasoning	1.00	14	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+grok:grok-4.5	bulk	1.00	22	60/60 correct
+deepseek:deepseek/deepseek-v4-pro	bugfix	1.00	89	visible ok, hidden 6/6
+deepseek:deepseek/deepseek-v4-pro	reasoning	1.00	12	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+deepseek:deepseek/deepseek-v4-pro	bulk	1.00	27	60/60 correct
+deepseek:deepseek/deepseek-flash	bugfix	1.00	15	visible ok, hidden 6/6
+deepseek:deepseek/deepseek-flash	reasoning	1.00	6	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+deepseek:deepseek/deepseek-flash	bulk	1.00	10	60/60 correct
+opencode:opencode/tidepool-alpha-free	bugfix	0.00	4	lane failed: failed
+opencode:opencode/tidepool-alpha-free	reasoning	0.00	4	lane failed
+opencode:opencode/tidepool-alpha-free	bulk	0.00	4	lane failed
+agy:gemini-4-neon-high	bugfix	1.00	74	visible ok, hidden 6/6
+agy:gemini-4-neon-high	reasoning	1.00	28	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-4-neon-high	bulk	1.00	35	60/60 correct
+agy:gemini-4-carbon-high	bugfix	1.00	226	visible ok, hidden 6/6
+agy:gemini-4-carbon-high	reasoning	1.00	71	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-4-carbon-high	bulk	1.00	133	60/60 correct
+agy:gemini-4-argon-high	bugfix	1.00	63	visible ok, hidden 6/6
+agy:gemini-4-argon-high	reasoning	1.00	27	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-4-argon-high	bulk	1.00	41	60/60 correct
+agy:gemini-4-hydrogen-high	bugfix	1.00	32	visible ok, hidden 6/6
+agy:gemini-4-hydrogen-high	reasoning	1.00	16	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-4-hydrogen-high	bulk	1.00	20	60/60 correct
+agy:gemini-pro-orchestrator	bugfix	1.00	67	visible ok, hidden 6/6
+agy:gemini-pro-orchestrator	reasoning	1.00	32	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-pro-orchestrator	bulk	1.00	36	60/60 correct
+agy:gemini-3.8-flash-high	bugfix	1.00	223	visible ok, hidden 6/6
+agy:gemini-3.8-flash-high	reasoning	1.00	39	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gemini-3.8-flash-high	bulk	0.00	30	lane failed: empty answer (headless mode auto-denied a tool permission)
+agy:claude-opus-5-5-high	bugfix	1.00	25	visible ok, hidden 6/6
+agy:claude-opus-5-5-high	reasoning	1.00	8	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:claude-opus-5-5-high	bulk	1.00	12	60/60 correct
+agy:claude-sonnet-5-5-high	bugfix	1.00	30	visible ok, hidden 6/6
+agy:claude-sonnet-5-5-high	reasoning	1.00	8	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:claude-sonnet-5-5-high	bulk	1.00	10	60/60 correct
+agy:gpt-oss-120b-medium	bugfix	1.00	41	visible ok, hidden 6/6
+agy:gpt-oss-120b-medium	reasoning	1.00	10	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+agy:gpt-oss-120b-medium	bulk	1.00	18	60/60 correct
+cursor:composer-2.5	bugfix	1.00	56	visible ok, hidden 6/6
+cursor:composer-2.5	reasoning	1.00	19	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+cursor:composer-2.5	bulk	1.00	12	60/60 correct
+cursor:auto	bugfix	1.00	156	visible ok, hidden 6/6; timing approximate (overlapping run)
+cursor:auto	reasoning	1.00	23	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401}); timing approximate (overlapping run)
+cursor:auto	bulk	1.00	23	60/60 correct; timing approximate (overlapping run)
+api:ablit:abliterated-model	bugfix	-	-	skipped: lane has no tools
+api:ablit:abliterated-model	reasoning	1.00	9	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:ablit:abliterated-model	bulk	1.00	21	60/60 correct
+api:ablit:abliterated-model-large-v2	bugfix	-	-	skipped: lane has no tools
+api:ablit:abliterated-model-large-v2	reasoning	1.00	5	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:ablit:abliterated-model-large-v2	bulk	1.00	11	60/60 correct
+api:ablit:abliterated-model-large-flash	bugfix	-	-	skipped: lane has no tools
+api:ablit:abliterated-model-large-flash	reasoning	1.00	2	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:ablit:abliterated-model-large-flash	bulk	1.00	5	60/60 correct
+api:openrouter:baidu/ernie-5.5-flash-preview:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:baidu/ernie-5.5-flash-preview:free	reasoning	1.00	5	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:baidu/ernie-5.5-flash-preview:free	bulk	1.00	12	60/60 correct
+api:openrouter:google/gemma-4-26b-a4b-it:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:google/gemma-4-26b-a4b-it:free	reasoning	0.00	1	lane failed: rate limit (HTTP 429)
+api:openrouter:google/gemma-4-26b-a4b-it:free	bulk	0.00	0	lane failed: rate limit (HTTP 429)
+api:openrouter:google/gemma-4-31b-it:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:google/gemma-4-31b-it:free	reasoning	0.00	0	lane failed: rate limit (HTTP 429)
+api:openrouter:google/gemma-4-31b-it:free	bulk	0.00	1	lane failed: rate limit (HTTP 429)
+api:openrouter:liquid/lfm-3-1.7b:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:liquid/lfm-3-1.7b:free	reasoning	1.00	17	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:liquid/lfm-3-1.7b:free	bulk	0.00	31	lane failed: empty answer
+api:openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free	reasoning	0.67	17	2/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 23, 'q2': 7, 'q3': 401})
+api:openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free	bulk	1.00	41	60/60 correct
+api:openrouter:nvidia/nemotron-3-ultra-550b-a55b:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:nvidia/nemotron-3-ultra-550b-a55b:free	reasoning	1.00	26	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:nvidia/nemotron-3-ultra-550b-a55b:free	bulk	1.00	119	60/60 correct
+api:openrouter:nvidia/nemotron-3.5-lightning:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:nvidia/nemotron-3.5-lightning:free	reasoning	1.00	10	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:nvidia/nemotron-3.5-lightning:free	bulk	1.00	147	60/60 correct
+api:openrouter:nvidia/nemotron-3.5-super-vl:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:nvidia/nemotron-3.5-super-vl:free	reasoning	1.00	12	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:nvidia/nemotron-3.5-super-vl:free	bulk	1.00	37	60/60 correct
+api:openrouter:particle-ai/particle-1:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:particle-ai/particle-1:free	reasoning	1.00	2	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:particle-ai/particle-1:free	bulk	1.00	6	60/60 correct
+api:openrouter:recursive/flint-v1.0:free	bugfix	-	-	skipped: lane has no tools
+api:openrouter:recursive/flint-v1.0:free	reasoning	1.00	23	3/3 (gold {'q1': 22, 'q2': 7, 'q3': 401}, got {'q1': 22, 'q2': 7, 'q3': 401})
+api:openrouter:recursive/flint-v1.0:free	bulk	1.00	133	60/60 correct

@@ -23,7 +23,7 @@ def models(rec):
 
 def main():
     out = Path(sys.argv[1])
-    recs = sorted((json.loads(p.read_text(encoding="utf-8")) for p in out.glob("[AB]*.json")),
+    recs = sorted((json.loads(p.read_text(encoding="utf-8")) for p in out.glob("[ABC]*.json")),
                   key=lambda r: (r["arm"], r["run"]))
     print("| Run | Cost (USD) | Tokens in+out (cache read / write) | Wall (min) | Turns | Hidden tests | Per task (bug/feat/refac/parse) | Visible tests intact | Cost by model |")
     print("|---|---|---|---|---|---|---|---|---|")

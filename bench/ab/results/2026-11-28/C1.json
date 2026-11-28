@@ -1,0 +1,91 @@
+{
+  "arm": "C",
+  "run": 1,
+  "is_error": false,
+  "stop_reason": "end_turn",
+  "subtype": "success",
+  "total_cost_usd": 1.7496877999999998,
+  "wall_s": 151,
+  "exit": 0,
+  "duration_ms": 44421,
+  "num_turns": 6,
+  "usage_main": {
+    "input_tokens": 10,
+    "output_tokens": 4312,
+    "cache_creation_input_tokens": 9032,
+    "cache_read_input_tokens": 325857
+  },
+  "modelUsage": {
+    "claude-fable-5-2": {
+      "inputTokens": 34,
+      "outputTokens": 10216,
+      "cacheReadInputTokens": 914816,
+      "cacheCreationInputTokens": 39402,
+      "webSearchRequests": 0,
+      "costUSD": 1.2223072,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1604,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationEphemeral1hInputTokens": 39402,
+      "canonicalModel": "claude-fable-5-2",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5-5": {
+      "inputTokens": 46,
+      "outputTokens": 23844,
+      "cacheReadInputTokens": 681861,
+      "cacheCreationInputTokens": 88265,
+      "webSearchRequests": 0,
+      "costUSD": 0.5273806,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 4187,
+      "cacheCreationEphemeral5mInputTokens": 88265,
+      "cacheCreationEphemeral1hInputTokens": 0,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "subagent_stats": {
+    "spawned": 4,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 4
+    },
+    "started_in_background": 4,
+    "max_depth": 1,
+    "spawned_by_subagents": 0,
+    "completed": 4,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {
+      "general-purpose": 4
+    }
+  },
+  "permission_denials": [],
+  "final_message": "All four tasks are done and `python -m unittest` passes (15 tests, including the 3 new ones). Nothing is committed, and the existing test files are untouched.\n\nEach task was implemented by its own Sonnet subagent; I then read every diff and ran my own checks on the interval, cache and query rules.\n\n- **Task 1, `intervals.py`:** `merge()` now follows all seven docstring rules. It no longer sorts the input in place, touching intervals merge, a contained interval no longer shrinks the outer one, and `start > end` raises `ValueError`. I made one small edit myself: the error message always names the interval in tuple form, e.g. `(5, 2)`, even if it was passed as a list.\n- **Task 2, `cache.py`:** `LRUCache(capacity, ttl=None, clock=None)` is implemented per the spec. Expired entries are dropped before any live entry is evicted.\n- **Task 3, `report.py`:** `group_totals`, `rank` and `format_cents` are module-level, and `summarize()` has an 8-line body. The subagent reported a differential test against the original on 60,000 random inputs with no mismatches; I did not rerun that myself. `test_report_parts.py` adds three tests.\n- **Task 4, `query.py`:** `parse` and `matches` are implemented. All six error-position examples from the spec give the right `pos`, and precedence, associativity, escapes and the null/bool/type-mix rules check out.\n\nThe spec leaves a few parser points open, and hidden tests could disagree with the choices made:\n\n- **Other escapes:** a string escape other than `\\\"` or `\\\\` is a `ParseError` at the backslash.\n- **Malformed dots:** `a.`, `a..b` and `a.1` report the error at the dot (position 1), not at `len(text)`.\n- **Bool ordering:** `<`, `<=`, `>`, `>=` between two bools are always False; only `=` and `!=` work on bools.\n- **Keywords inside dotted names:** `a.and = 1` is a valid field; a keyword only counts as a whole undotted word.\n- **Digits followed by letters:** `a = 12abc` is an error at `abc`, and `a=1AND b=2` is valid.",
+  "grade": {
+    "tasks": {
+      "intervals (bugfix)": "8/8",
+      "cache (feature)": "8/8",
+      "report (refactor)": "6/6",
+      "query (parser)": "14/14"
+    },
+    "visible_tests_intact": true,
+    "visible": "12/12",
+    "hidden_total": "36/36"
+  }
+}

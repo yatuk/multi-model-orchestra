@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# mmo-score: scoreboard and cost measurements from the lines mmo-run, mmo-check and mmo-council append to $MMO_LOG.
+#   mmo-score [FILE]                    per-lane table (default: $MMO_LOG)
+#   mmo-score [FILE] --share            share of runs and wall seconds by family; drift sentence; councils
+#   mmo-score [FILE] --task ID          one task's history and the escalation advice
+#   mmo-score [FILE] --routes           per tier, lanes ranked by first-try pass rate (needs 5 checked tasks)
+#   mmo-score [FILE] --cost [--prices FILE]   reported cost, tokens, cost per passed task (docs/cost.md)
+#   mmo-score [FILE] --councils         councils run, agreed, split
+#   mmo-score --reports DIR [--lines N] lane outputs whose answer is longer than N lines (default 40)
+#   mmo-score log-agent --model M --task ID [--status ok|failed] [--seconds N] [--log FILE]
+#   mmo-score council-note --task ID --agreed|--split [--log FILE]
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python)" || { echo "mmo-score: python is required" >&2; exit 2; }
+exec "$PY" "$HERE/mmo_score.py" "$@"

@@ -1,0 +1,70 @@
+diff -ru a/roombook/cli/maint.py b/roombook/cli/maint.py
+--- a/roombook/cli/maint.py	2026-11-28 16:09:39.039288100 +0300
++++ b/roombook/cli/maint.py	2026-11-28 16:09:39.103338100 +0300
+@@ -29,8 +29,7 @@
+     problems = []
+     by_room = {}
+     for b in bookings:
+-        if not b.is_cancelled:
+-            by_room.setdefault(b.room, []).append(b)
++        by_room.setdefault(b.room, []).append(b)
+     for code, items in sorted(by_room.items()):
+         if code not in rooms:
+             problems.append(f"{code}: room no longer exists ({len(items)} bookings)")
+diff -ru a/roombook/store/bookings.py b/roombook/store/bookings.py
+--- a/roombook/store/bookings.py	2026-11-28 16:09:39.031981900 +0300
++++ b/roombook/store/bookings.py	2026-11-28 16:09:39.147351700 +0300
+@@ -95,10 +95,8 @@
+             "ORDER BY starts_at, id", (room, to_db(end), to_db(start)))
+         return [_booking(r) for r in rows if r["id"] != exclude_id]
+ 
+-    def on_day(self, d, room=None, include_cancelled=False):
++    def on_day(self, d, room=None, include_cancelled=True):
+         sql = f"SELECT {_COLS} FROM bookings WHERE substr(starts_at, 1, 10) = ?"
+-        if not include_cancelled:
+-            sql += f" AND {_ACTIVE}"
+         args = [day_key(d)]
+         if room:
+             sql += " AND room = ?"
+@@ -106,11 +104,9 @@
+         sql += " ORDER BY starts_at, room, id"
+         return [_booking(r) for r in self.conn.execute(sql, args)]
+ 
+-    def between(self, first_day, stop_day, room=None, include_cancelled=False):
++    def between(self, first_day, stop_day, room=None, include_cancelled=True):
+         """Bookings starting on first_day up to, not including, stop_day."""
+         sql = f"SELECT {_COLS} FROM bookings WHERE starts_at >= ? AND starts_at < ?"
+-        if not include_cancelled:
+-            sql += f" AND {_ACTIVE}"
+         args = [day_start(first_day), day_start(stop_day)]
+         if room:
+             sql += " AND room = ?"
+@@ -120,24 +116,24 @@
+ 
+     def busy_at(self, room, when):
+         row = self.conn.execute(
+-            f"SELECT {_COLS} FROM bookings WHERE {_ACTIVE} AND room = ? AND starts_at <= ? AND ends_at > ? "
++            f"SELECT {_COLS} FROM bookings WHERE room = ? AND starts_at <= ? AND ends_at > ? "
+             "ORDER BY starts_at LIMIT 1", (room, to_db(when), to_db(when))).fetchone()
+         return _booking(row) if row else None
+ 
+     def next_start(self, room, when):
+         row = self.conn.execute(
+-            f"SELECT {_COLS} FROM bookings WHERE {_ACTIVE} AND room = ? AND starts_at > ? ORDER BY starts_at LIMIT 1",
++            f"SELECT {_COLS} FROM bookings WHERE room = ? AND starts_at > ? ORDER BY starts_at LIMIT 1",
+             (room, to_db(when))).fetchone()
+         return _booking(row) if row else None
+ 
+     def upcoming_for(self, owner, now):
+         rows = self.conn.execute(
+-            f"SELECT {_COLS} FROM bookings WHERE {_ACTIVE} AND owner = ? AND ends_at > ? ORDER BY starts_at, id",
++            f"SELECT {_COLS} FROM bookings WHERE owner = ? AND ends_at > ? ORDER BY starts_at, id",
+             (owner, to_db(now)))
+         return [_booking(r) for r in rows]
+ 
+     def in_series(self, series_id):
+-        rows = self.conn.execute(f"SELECT {_COLS} FROM bookings WHERE {_ACTIVE} AND series_id = ? ORDER BY starts_at",
++        rows = self.conn.execute(f"SELECT {_COLS} FROM bookings WHERE series_id = ? ORDER BY starts_at",
+                                  (series_id,))
+         return [_booking(r) for r in rows]
+ 

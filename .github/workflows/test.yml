@@ -27,13 +27,25 @@ jobs:
       - name: Install pytest
         run: python -m pip install pytest
       - name: otomode tests
-        run: python -m pytest skills/otomode/scripts -q
-      - name: Classifier tests
-        run: bash skills/orchestra/scripts/test-mmo-classify.sh
+        run: python -m pytest skills/otomode/scripts skills/orchestra/scripts/test_mmo_model_guard.py skills/orchestra/scripts/test_mmo_limit.py -q
+      - name: Runner, checker and lane tests
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+          for t in classify run check lessons lanes-1 lanes-2 api cloud roster lanes-3 score advise usage tiers; do
+            echo "== $t"; bash skills/orchestra/scripts/test-mmo-$t.sh || exit 1
+          done
+      - name: Benchmark tests
+        run: |
+          echo "== bench parse"; bash bench/test-run-parse.sh || exit 1
+          echo "== bench grade"; bash bench/test-grade.sh || exit 1
+      - name: Python syntax
+        run: python -m py_compile skills/orchestra/scripts/mmo_loop.py
       - name: Shell syntax
         run: |
-          for f in skills/orchestra/scripts/mmo-run skills/orchestra/scripts/mmo-council \
-                   skills/orchestra/scripts/mmo-preflight skills/orchestra/scripts/test-mmo-classify.sh \
-                   bench/run.sh install.sh; do
-            bash -n "$f" && echo "ok $f"
+          for f in skills/orchestra/scripts/mmo-* skills/orchestra/scripts/test-mmo-*.sh \
+                   skills/orchestra/scripts/providers/*.sh bench/run.sh bench/test-run-parse.sh \
+                   bench/test-grade.sh install.sh; do
+            bash -n "$f" && echo "ok $f" || exit 1
           done

@@ -1,0 +1,442 @@
+diff --git a/cache.py b/cache.py
+index f2606f9..a9eb13c 100644
+--- a/cache.py
++++ b/cache.py
+@@ -1,29 +1,56 @@
+-"""A small LRU cache."""
++"""A small LRU cache with optional TTL."""
++import time
+ from collections import OrderedDict
+ 
+ 
+ class LRUCache:
+-    def __init__(self, capacity):
++    def __init__(self, capacity, ttl=None, clock=None):
+         if capacity < 1:
+             raise ValueError("capacity must be at least 1")
++        if ttl is not None and ttl <= 0:
++            raise ValueError("ttl must be positive")
+         self.capacity = capacity
+-        self._data = OrderedDict()
++        self.ttl = ttl
++        self.clock = clock if clock is not None else time.monotonic
++        self._data = OrderedDict()  # key -> (value, put_time)
++
++    def _expired(self, stamp, now):
++        return self.ttl is not None and now - stamp >= self.ttl
++
++    def _purge(self):
++        if self.ttl is None:
++            return
++        now = self.clock()
++        dead = [k for k, (_, t) in self._data.items() if self._expired(t, now)]
++        for k in dead:
++            del self._data[k]
+ 
+     def get(self, key, default=None):
+         if key not in self._data:
+             return default
++        value, stamp = self._data[key]
++        if self._expired(stamp, self.clock()):
++            del self._data[key]
++            return default
+         self._data.move_to_end(key)
+-        return self._data[key]
++        return value
+ 
+     def put(self, key, value):
++        self._purge()
+         if key in self._data:
+             self._data.move_to_end(key)
+-        self._data[key] = value
++        self._data[key] = (value, self.clock())
+         if len(self._data) > self.capacity:
+             self._data.popitem(last=False)
+ 
+     def __len__(self):
++        self._purge()
+         return len(self._data)
+ 
+     def __contains__(self, key):
+-        return key in self._data
++        if key not in self._data:
++            return False
++        if self._expired(self._data[key][1], self.clock()):
++            del self._data[key]
++            return False
++        return True
+diff --git a/intervals.py b/intervals.py
+index 1d47c38..f5ddb71 100644
+--- a/intervals.py
++++ b/intervals.py
+@@ -14,11 +14,18 @@ def merge(intervals):
+     6. start > end raises ValueError naming the bad interval.
+     7. The input list is not modified. The result is a new list of tuples.
+     """
++    items = []
++    for iv in intervals:
++        start, end = iv
++        if start > end:
++            raise ValueError("invalid interval (start > end): %r" % (iv,))
++        items.append((start, end))
++    items.sort()
+     out = []
+-    intervals.sort()
+-    for start, end in intervals:
+-        if out and start < out[-1][1]:
+-            out[-1] = (out[-1][0], end)
++    for start, end in items:
++        if out and start <= out[-1][1]:
++            if end > out[-1][1]:
++                out[-1] = (out[-1][0], end)
+         else:
+             out.append((start, end))
+     return out
+diff --git a/query.py b/query.py
+index 6c0fb9b..b6a75cb 100644
+--- a/query.py
++++ b/query.py
+@@ -1,4 +1,6 @@
+ """A tiny filter language. See TASKS.md, task 4, for the grammar."""
++import operator
++import re
+ 
+ 
+ class ParseError(ValueError):
+@@ -7,9 +9,217 @@ class ParseError(ValueError):
+         self.pos = pos
+ 
+ 
++_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
++_INT = re.compile(r"-?[0-9]+")
++_OPS = ("<=", ">=", "!=", "<", ">", "=")
++_KEYWORDS = {"and", "or", "not", "true", "false", "null"}
++_LITERALS = {"true": True, "false": False, "null": None}
++
++
++class _Lexer:
++    """Lazy tokenizer: tokens are (kind, value, pos); lexical errors become
++    ("ERR", message, pos) tokens, raised only when the parser reaches them."""
++
++    def __init__(self, text):
++        self.text = text
++        self.i = 0
++        self.tok = None
++
++    def peek(self):
++        if self.tok is None:
++            self.tok = self._scan()
++        return self.tok
++
++    def next(self):
++        tok = self.peek()
++        if tok[0] != "EOF":
++            self.tok = None
++        return tok
++
++    def _scan(self):
++        text, n = self.text, len(self.text)
++        i = self.i
++        while i < n and text[i].isspace():
++            i += 1
++        self.i = i
++        if i >= n:
++            return ("EOF", None, n)
++        c = text[i]
++        if c == "(" or c == ")":
++            self.i = i + 1
++            return (c, c, i)
++        for op in _OPS:
++            if text.startswith(op, i):
++                self.i = i + len(op)
++                return ("OP", op, i)
++        m = _INT.match(text, i)
++        if m:
++            self.i = m.end()
++            return ("INT", int(m.group()), i)
++        m = _WORD.match(text, i)
++        if m:
++            self.i = m.end()
++            return ("WORD", m.group(), i)
++        if c == '"':
++            return self._string(i)
++        self.i = n  # lexical error: nothing meaningful follows
++        return ("ERR", "unexpected character %r" % c, i)
++
++    def _string(self, start):
++        text, n = self.text, len(self.text)
++        j = start + 1
++        out = []
++        while j < n:
++            c = text[j]
++            if c == '"':
++                self.i = j + 1
++                return ("STR", "".join(out), start)
++            if c == "\\":
++                if j + 1 < n and text[j + 1] in '"\\':
++                    out.append(text[j + 1])
++                    j += 2
++                    continue
++                self.i = n
++                return ("ERR", "invalid escape in string", start)
++            out.append(c)
++            j += 1
++        self.i = n
++        return ("ERR", "unterminated string", start)
++
++
++class _Parser:
++    def __init__(self, text):
++        self.lx = _Lexer(text)
++
++    def peek(self):
++        tok = self.lx.peek()
++        if tok[0] == "ERR":
++            raise ParseError(tok[1], tok[2])
++        return tok
++
++    def fail(self, what):
++        tok = self.peek()
++        raise ParseError("expected %s" % what, tok[2])
++
++    def is_kw(self, tok, kw):
++        return tok[0] == "WORD" and tok[1].lower() == kw
++
++    def parse(self):
++        node = self.or_expr()
++        if self.peek()[0] != "EOF":
++            self.fail("end of input")
++        return node
++
++    def or_expr(self):
++        node = self.and_expr()
++        while self.is_kw(self.peek(), "or"):
++            self.lx.next()
++            node = ("or", node, self.and_expr())
++        return node
++
++    def and_expr(self):
++        node = self.not_expr()
++        while self.is_kw(self.peek(), "and"):
++            self.lx.next()
++            node = ("and", node, self.not_expr())
++        return node
++
++    def not_expr(self):
++        if self.is_kw(self.peek(), "not"):
++            self.lx.next()
++            return ("not", self.not_expr())
++        return self.primary()
++
++    def primary(self):
++        tok = self.peek()
++        if tok[0] == "(":
++            self.lx.next()
++            node = self.or_expr()
++            if self.peek()[0] != ")":
++                self.fail("')'")
++            self.lx.next()
++            return node
++        if tok[0] != "WORD" or tok[1].lower() in _KEYWORDS:
++            self.fail("field name or '('")
++        self.lx.next()
++        field = tok[1]
++        op = self.peek()
++        if op[0] != "OP":
++            self.fail("comparison operator")
++        self.lx.next()
++        val = self.peek()
++        if val[0] in ("INT", "STR"):
++            value = val[1]
++        elif val[0] == "WORD" and val[1].lower() in _LITERALS:
++            value = _LITERALS[val[1].lower()]
++        else:
++            self.fail("value")
++        self.lx.next()
++        return ("cmp", field, op[1], value)
++
++
+ def parse(text):
+-    raise NotImplementedError
++    p = _Parser(text)
++    try:
++        return p.parse()
++    except RecursionError:
++        raise ParseError("expression nested too deeply", p.lx.peek()[2]) from None
++
++
++_CMP = {
++    "=": operator.eq, "!=": operator.ne, "<": operator.lt,
++    "<=": operator.le, ">": operator.gt, ">=": operator.ge,
++}
++_MISSING = object()
++
++
++def _lookup(record, field):
++    cur = record
++    for part in field.split("."):
++        if not isinstance(cur, dict) or part not in cur:
++            return _MISSING
++        cur = cur[part]
++    return cur
++
++
++def _eval_cmp(record, field, op, lit):
++    v = _lookup(record, field)
++    if v is _MISSING:
++        return False
++    if lit is None:
++        if op == "=":
++            return v is None
++        if op == "!=":
++            return v is not None
++        return False
++    if isinstance(lit, bool):
++        return isinstance(v, bool) and op in ("=", "!=") and _CMP[op](v, lit)
++    if isinstance(lit, int):
++        ok = isinstance(v, (int, float)) and not isinstance(v, bool)
++    else:
++        ok = isinstance(v, str)
++    return ok and _CMP[op](v, lit)
++
++
++def _evaluate(node, record):
++    kind = node[0]
++    if kind == "cmp":
++        return _eval_cmp(record, node[1], node[2], node[3])
++    if kind == "not":
++        return not _evaluate(node[1], record)
++    # and/or: walk the left spine iteratively (chains can be very long)
++    rights = []
++    while node[0] == kind:
++        rights.append(node[2])
++        node = node[1]
++    result = _evaluate(node, record)
++    for right in reversed(rights):
++        if kind == "and":
++            result = result and _evaluate(right, record)
++        else:
++            result = result or _evaluate(right, record)
++    return result
+ 
+ 
+ def matches(text, record):
+-    raise NotImplementedError
++    return _evaluate(parse(text), record)
+diff --git a/report.py b/report.py
+index 7a30f4e..5a830bc 100644
+--- a/report.py
++++ b/report.py
+@@ -1,46 +1,36 @@
+-"""Order report. Works, but is one long function."""
++"""Order report."""
+ 
+ 
+-def summarize(orders):
+-    # orders: list of dicts with keys customer, amount (cents, int), status
+-    lines = []
++def group_totals(orders):
++    """Return {customer: (net_cents, order_count)}; cancelled orders skipped."""
+     totals = {}
+-    counts = {}
+     for o in orders:
+         if o["status"] == "cancelled":
+             continue
+-        if o["status"] == "refunded":
+-            if o["customer"] in totals:
+-                totals[o["customer"]] = totals[o["customer"]] - o["amount"]
+-            else:
+-                totals[o["customer"]] = 0 - o["amount"]
+-            if o["customer"] in counts:
+-                counts[o["customer"]] = counts[o["customer"]] + 1
+-            else:
+-                counts[o["customer"]] = 1
+-            continue
+-        if o["customer"] in totals:
+-            totals[o["customer"]] = totals[o["customer"]] + o["amount"]
+-        else:
+-            totals[o["customer"]] = o["amount"]
+-        if o["customer"] in counts:
+-            counts[o["customer"]] = counts[o["customer"]] + 1
+-        else:
+-            counts[o["customer"]] = 1
+-    names = list(totals.keys())
+-    for i in range(len(names)):
+-        for j in range(len(names) - 1 - i):
+-            a, b = names[j], names[j + 1]
+-            if totals[a] < totals[b] or (totals[a] == totals[b] and a > b):
+-                names[j], names[j + 1] = names[j + 1], names[j]
+-    grand = 0
+-    for n in names:
+-        t = totals[n]
+-        grand = grand + t
+-        sign = "-" if t < 0 else ""
+-        t = abs(t)
+-        lines.append(n + ": " + sign + str(t // 100) + "." + str(t % 100).zfill(2) + " (" + str(counts[n]) + " orders)")
+-    sign = "-" if grand < 0 else ""
+-    g = abs(grand)
+-    lines.append("TOTAL: " + sign + str(g // 100) + "." + str(g % 100).zfill(2))
++        amount = -o["amount"] if o["status"] == "refunded" else o["amount"]
++        net, count = totals.get(o["customer"], (0, 0))
++        totals[o["customer"]] = (net + amount, count + 1)
++    return totals
++
++
++def rank(totals):
++    """Customer names by net total descending, ties by name ascending."""
++    return sorted(totals, key=lambda n: (-totals[n][0], n))
++
++
++def format_cents(cents):
++    sign = "-" if cents < 0 else ""
++    c = abs(cents)
++    return sign + str(c // 100) + "." + str(c % 100).zfill(2)
++
++
++def summarize(orders):
++    # orders: list of dicts with keys customer, amount (cents, int), status
++    totals = group_totals(orders)
++    lines = []
++    for n in rank(totals):
++        net, count = totals[n]
++        lines.append(n + ": " + format_cents(net) + " (" + str(count) + " orders)")
++    grand = sum(net for net, _ in totals.values())
++    lines.append("TOTAL: " + format_cents(grand))
+     return "\n".join(lines)
+diff --git a/test_report_parts.py b/test_report_parts.py
+new file mode 100644
+index 0000000..76d3ef3
+--- /dev/null
++++ b/test_report_parts.py
+@@ -0,0 +1,31 @@
++import unittest
++
++from report import format_cents, group_totals, rank
++
++
++class ReportPartsTest(unittest.TestCase):
++    def test_group_totals(self):
++        orders = [
++            {"customer": "a", "amount": 500, "status": "paid"},
++            {"customer": "a", "amount": 200, "status": "refunded"},
++            {"customer": "b", "amount": 900, "status": "cancelled"},
++            {"customer": "c", "amount": 50, "status": "refunded"},
++        ]
++        self.assertEqual(group_totals(orders), {"a": (300, 2), "c": (-50, 1)})
++
++    def test_group_totals_empty(self):
++        self.assertEqual(group_totals([]), {})
++
++    def test_rank(self):
++        totals = {"b": (100, 1), "a": (100, 2), "c": (500, 1), "d": (-5, 1)}
++        self.assertEqual(rank(totals), ["c", "a", "b", "d"])
++
++    def test_format_cents(self):
++        self.assertEqual(format_cents(-305), "-3.05")
++        self.assertEqual(format_cents(7), "0.07")
++        self.assertEqual(format_cents(0), "0.00")
++        self.assertEqual(format_cents(12345), "123.45")
++
++
++if __name__ == "__main__":
++    unittest.main()

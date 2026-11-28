@@ -1,0 +1,441 @@
+diff --git a/cache.py b/cache.py
+index f2606f9..3002c83 100644
+--- a/cache.py
++++ b/cache.py
+@@ -1,29 +1,56 @@
+-"""A small LRU cache."""
++"""A small LRU cache with optional TTL."""
++import time
+ from collections import OrderedDict
+ 
+ 
+ class LRUCache:
+-    def __init__(self, capacity):
++    def __init__(self, capacity, ttl=None, clock=None):
+         if capacity < 1:
+             raise ValueError("capacity must be at least 1")
++        if ttl is not None and not ttl > 0:
++            raise ValueError("ttl must be greater than 0")
+         self.capacity = capacity
+-        self._data = OrderedDict()
++        self.ttl = ttl
++        self.clock = clock if clock is not None else time.monotonic
++        self._data = OrderedDict()  # key -> (value, time_put)
++
++    def _expired(self, stamp, now):
++        return self.ttl is not None and now - stamp >= self.ttl
++
++    def _purge(self):
++        if self.ttl is None:
++            return
++        now = self.clock()
++        dead = [k for k, (_, t) in self._data.items() if self._expired(t, now)]
++        for k in dead:
++            del self._data[k]
+ 
+     def get(self, key, default=None):
+         if key not in self._data:
+             return default
++        value, t = self._data[key]
++        if self._expired(t, self.clock()):
++            del self._data[key]
++            return default
+         self._data.move_to_end(key)
+-        return self._data[key]
++        return value
+ 
+     def put(self, key, value):
++        self._purge()
+         if key in self._data:
+             self._data.move_to_end(key)
+-        self._data[key] = value
+-        if len(self._data) > self.capacity:
++        self._data[key] = (value, self.clock())
++        while len(self._data) > self.capacity:
+             self._data.popitem(last=False)
+ 
+     def __len__(self):
++        self._purge()
+         return len(self._data)
+ 
+     def __contains__(self, key):
+-        return key in self._data
++        if key not in self._data:
++            return False
++        if self._expired(self._data[key][1], self.clock()):
++            del self._data[key]
++            return False
++        return True
+diff --git a/intervals.py b/intervals.py
+index 1d47c38..d190f9c 100644
+--- a/intervals.py
++++ b/intervals.py
+@@ -14,11 +14,18 @@ def merge(intervals):
+     6. start > end raises ValueError naming the bad interval.
+     7. The input list is not modified. The result is a new list of tuples.
+     """
++    items = []
++    for item in intervals:
++        start, end = item
++        if start > end:
++            raise ValueError("invalid interval: %r" % ((start, end),))
++        items.append((start, end))
++    items.sort()
+     out = []
+-    intervals.sort()
+-    for start, end in intervals:
+-        if out and start < out[-1][1]:
+-            out[-1] = (out[-1][0], end)
++    for start, end in items:
++        if out and start <= out[-1][1]:
++            if end > out[-1][1]:
++                out[-1] = (out[-1][0], end)
+         else:
+             out.append((start, end))
+     return out
+diff --git a/query.py b/query.py
+index 6c0fb9b..8e5ec0b 100644
+--- a/query.py
++++ b/query.py
+@@ -7,9 +7,220 @@ class ParseError(ValueError):
+         self.pos = pos
+ 
+ 
++_KEYWORDS = {"and", "or", "not", "true", "false", "null"}
++_LITERALS = {"true": True, "false": False, "null": None}
++_OPS = ("<=", ">=", "!=", "=", "<", ">")
++
++
++def _is_start(c):
++    return ("a" <= c <= "z") or ("A" <= c <= "Z") or c == "_"
++
++
++def _is_part(c):
++    return _is_start(c) or ("0" <= c <= "9")
++
++
++def _tokens(text):
++    """Lazily yield (kind, value, pos); kinds: ( ) op int str ident kw end."""
++    n = len(text)
++    i = 0
++    while True:
++        while i < n and text[i] in " \t\r\n\f\v":
++            i += 1
++        if i >= n:
++            yield ("end", None, n)
++            return
++        c = text[i]
++        if c in "()":
++            yield (c, c, i)
++            i += 1
++        elif c in "=!<>":
++            for op in _OPS:
++                if text.startswith(op, i):
++                    yield ("op", op, i)
++                    i += len(op)
++                    break
++            else:
++                raise ParseError("unexpected character %r" % c, i)
++        elif c == '"':
++            start = i
++            i += 1
++            chars = []
++            while True:
++                if i >= n:
++                    raise ParseError("unterminated string", start)
++                d = text[i]
++                if d == '"':
++                    i += 1
++                    break
++                if d == "\\":
++                    if i + 1 >= n:
++                        raise ParseError("unterminated string", start)
++                    e = text[i + 1]
++                    if e not in '"\\':
++                        raise ParseError("invalid escape", i)
++                    chars.append(e)
++                    i += 2
++                else:
++                    chars.append(d)
++                    i += 1
++            yield ("str", "".join(chars), start)
++        elif c == "-" or ("0" <= c <= "9"):
++            start = i
++            if c == "-":
++                i += 1
++                if i >= n or not ("0" <= text[i] <= "9"):
++                    raise ParseError("'-' must be followed by a digit", start)
++            while i < n and "0" <= text[i] <= "9":
++                i += 1
++            yield ("int", int(text[start:i]), start)
++        elif _is_start(c):
++            start = i
++            while i < n and _is_part(text[i]):
++                i += 1
++            dotted = False
++            while i < n and text[i] == ".":
++                if i + 1 < n and _is_start(text[i + 1]):
++                    dotted = True
++                    i += 1
++                    while i < n and _is_part(text[i]):
++                        i += 1
++                else:
++                    raise ParseError("bad field name", i)
++            word = text[start:i]
++            if not dotted and word.lower() in _KEYWORDS:
++                yield ("kw", word.lower(), start)
++            else:
++                yield ("ident", word, start)
++        else:
++            raise ParseError("unexpected character %r" % c, i)
++
++
++class _Parser:
++    def __init__(self, text):
++        self.text = text
++        self.gen = _tokens(text)
++        self.tok = next(self.gen)
++
++    def advance(self):
++        t = self.tok
++        if t[0] != "end":
++            self.tok = next(self.gen)
++        return t
++
++    def fail(self, what=None):
++        kind, _, pos = self.tok
++        if kind == "end":
++            raise ParseError("unexpected end of input", pos)
++        raise ParseError("unexpected token" + (", expected " + what if what else ""), pos)
++
++    def is_kw(self, word):
++        return self.tok[0] == "kw" and self.tok[1] == word
++
++    def expr(self):
++        node = self.and_expr()
++        while self.is_kw("or"):
++            self.advance()
++            node = ("or", node, self.and_expr())
++        return node
++
++    def and_expr(self):
++        node = self.not_expr()
++        while self.is_kw("and"):
++            self.advance()
++            node = ("and", node, self.not_expr())
++        return node
++
++    def not_expr(self):
++        if self.is_kw("not"):
++            self.advance()
++            return ("not", self.not_expr())
++        return self.primary()
++
++    def primary(self):
++        if self.tok[0] == "(":
++            self.advance()
++            node = self.expr()
++            if self.tok[0] != ")":
++                self.fail("')'")
++            self.advance()
++            return node
++        if self.tok[0] != "ident":
++            self.fail("field")
++        field = self.advance()[1]
++        if self.tok[0] != "op":
++            self.fail("operator")
++        op = self.advance()[1]
++        kind, val, _ = self.tok
++        if kind in ("int", "str"):
++            self.advance()
++            return ("cmp", field, op, val)
++        if kind == "kw" and val in _LITERALS:
++            self.advance()
++            return ("cmp", field, op, _LITERALS[val])
++        self.fail("value")
++
++
+ def parse(text):
+-    raise NotImplementedError
++    p = _Parser(text)
++    node = p.expr()
++    if p.tok[0] != "end":
++        p.fail("end of input")
++    return node
++
++
++def _is_num(v):
++    return isinstance(v, (int, float)) and not isinstance(v, bool)
++
++
++def _compare(v, op, lit):
++    if lit is None:
++        if op == "=":
++            return v is None
++        if op == "!=":
++            return v is not None
++        return False
++    if v is None:
++        return False
++    if isinstance(v, bool) or isinstance(lit, bool):
++        if not (isinstance(v, bool) and isinstance(lit, bool)):
++            return False
++        if op == "=":
++            return v == lit
++        if op == "!=":
++            return v != lit
++        return False
++    if (_is_num(v) and _is_num(lit)) or (isinstance(v, str) and isinstance(lit, str)):
++        if op == "=":
++            return v == lit
++        if op == "!=":
++            return v != lit
++        if op == "<":
++            return v < lit
++        if op == "<=":
++            return v <= lit
++        if op == ">":
++            return v > lit
++        return v >= lit
++    return False
++
++
++def _eval(node, record):
++    kind = node[0]
++    if kind == "cmp":
++        _, field, op, lit = node
++        v = record
++        for part in field.split("."):
++            if not isinstance(v, dict) or part not in v:
++                return False
++            v = v[part]
++        return _compare(v, op, lit)
++    if kind == "not":
++        return not _eval(node[1], record)
++    if kind == "and":
++        return _eval(node[1], record) and _eval(node[2], record)
++    return _eval(node[1], record) or _eval(node[2], record)
+ 
+ 
+ def matches(text, record):
+-    raise NotImplementedError
++    return _eval(parse(text), record)
+diff --git a/report.py b/report.py
+index 7a30f4e..0286946 100644
+--- a/report.py
++++ b/report.py
+@@ -1,46 +1,48 @@
+-"""Order report. Works, but is one long function."""
++"""Order report."""
+ 
+ 
+-def summarize(orders):
+-    # orders: list of dicts with keys customer, amount (cents, int), status
+-    lines = []
++def group_totals(orders):
++    """Return {customer: (net_cents, order_count)}; cancelled skipped, refunds subtract."""
+     totals = {}
+     counts = {}
+     for o in orders:
+         if o["status"] == "cancelled":
+             continue
++        c = o["customer"]
+         if o["status"] == "refunded":
+-            if o["customer"] in totals:
+-                totals[o["customer"]] = totals[o["customer"]] - o["amount"]
+-            else:
+-                totals[o["customer"]] = 0 - o["amount"]
+-            if o["customer"] in counts:
+-                counts[o["customer"]] = counts[o["customer"]] + 1
+-            else:
+-                counts[o["customer"]] = 1
+-            continue
+-        if o["customer"] in totals:
+-            totals[o["customer"]] = totals[o["customer"]] + o["amount"]
++            totals[c] = totals[c] - o["amount"] if c in totals else 0 - o["amount"]
+         else:
+-            totals[o["customer"]] = o["amount"]
+-        if o["customer"] in counts:
+-            counts[o["customer"]] = counts[o["customer"]] + 1
+-        else:
+-            counts[o["customer"]] = 1
++            totals[c] = totals[c] + o["amount"] if c in totals else o["amount"]
++        counts[c] = counts[c] + 1 if c in counts else 1
++    return {c: (totals[c], counts[c]) for c in totals}
++
++
++def rank(totals):
++    """Customer names by net total descending, ties by name ascending."""
+     names = list(totals.keys())
+     for i in range(len(names)):
+         for j in range(len(names) - 1 - i):
+             a, b = names[j], names[j + 1]
+-            if totals[a] < totals[b] or (totals[a] == totals[b] and a > b):
++            ta, tb = totals[a][0], totals[b][0]
++            if ta < tb or (ta == tb and a > b):
+                 names[j], names[j + 1] = names[j + 1], names[j]
++    return names
++
++
++def format_cents(cents):
++    """Format integer cents as a decimal string, e.g. -305 -> '-3.05'."""
++    sign = "-" if cents < 0 else ""
++    t = abs(cents)
++    return sign + str(t // 100) + "." + str(t % 100).zfill(2)
++
++
++def summarize(orders):
++    totals = group_totals(orders)
++    lines = []
+     grand = 0
+-    for n in names:
+-        t = totals[n]
+-        grand = grand + t
+-        sign = "-" if t < 0 else ""
+-        t = abs(t)
+-        lines.append(n + ": " + sign + str(t // 100) + "." + str(t % 100).zfill(2) + " (" + str(counts[n]) + " orders)")
+-    sign = "-" if grand < 0 else ""
+-    g = abs(grand)
+-    lines.append("TOTAL: " + sign + str(g // 100) + "." + str(g % 100).zfill(2))
++    for n in rank(totals):
++        net, count = totals[n]
++        grand = grand + net
++        lines.append(n + ": " + format_cents(net) + " (" + str(count) + " orders)")
++    lines.append("TOTAL: " + format_cents(grand))
+     return "\n".join(lines)
+diff --git a/test_report_parts.py b/test_report_parts.py
+new file mode 100644
+index 0000000..ed2ff2b
+--- /dev/null
++++ b/test_report_parts.py
+@@ -0,0 +1,30 @@
++import unittest
++
++from report import format_cents, group_totals, rank
++
++
++class TestParts(unittest.TestCase):
++    def test_group_totals(self):
++        orders = [
++            {"customer": "a", "amount": 500, "status": "paid"},
++            {"customer": "a", "amount": 200, "status": "refunded"},
++            {"customer": "b", "amount": 900, "status": "cancelled"},
++            {"customer": "c", "amount": 100, "status": "refunded"},
++        ]
++        self.assertEqual(group_totals(orders), {"a": (300, 2), "c": (-100, 1)})
++        self.assertEqual(group_totals([]), {})
++
++    def test_rank(self):
++        totals = {"z": (10, 1), "b": (50, 2), "a": (50, 1), "m": (-5, 1)}
++        self.assertEqual(rank(totals), ["a", "b", "z", "m"])
++        self.assertEqual(rank({}), [])
++
++    def test_format_cents(self):
++        cases = {-305: "-3.05", 7: "0.07", 0: "0.00", -7: "-0.07",
++                 100: "1.00", 123456: "1234.56", -100: "-1.00"}
++        for cents, text in cases.items():
++            self.assertEqual(format_cents(cents), text)
++
++
++if __name__ == "__main__":
++    unittest.main()

@@ -7,7 +7,7 @@ benchmark results, use the issue forms.
 ## Setup
 
 Needs bash, git, `timeout` and Python 3. On Windows, use Git Bash. Each lane needs its own CLI, signed in
-(`codex` for GPT, `kimi` for Kimi and DeepSeek), but you can work on most of the repo without any of them.
+(`mmo-run --list` shows them), but you can work on most of the repo without any of them.
 
 ```bash
 git clone https://github.com/yatuk/multi-model-orchestra
@@ -18,20 +18,30 @@ skills/orchestra/scripts/mmo-preflight     # offline, never calls a model
 
 ## Add a lane
 
-1. Add the provider to `skills/orchestra/scripts/mmo-run`: the non-interactive command, how the model and
-   effort flags are passed, and how a read-only run is enforced. If the CLI has no read-only mode, use the
-   throwaway worktree approach the Kimi lane uses.
-2. Teach `mmo_classify.py` the CLI's quota, auth and unknown-model messages so they map to `limit`, `auth`
-   and `model`. Add cases to `test-mmo-classify.sh`.
-3. Add the lane to `mmo-preflight`, and a skill in `skills/<name>-lane/SKILL.md` that stays short.
+1. Add one file, `skills/orchestra/scripts/providers/<name>.sh`: the non-interactive command, the model
+   flag, and how a read-only run is held. The fields are in [docs/lanes](docs/lanes/README.md#adding-a-lane).
+   If the CLI has no read-only mode, set `LANE_RO=throwaway` and the runner uses a discarded worktree.
+2. If the CLI's quota, auth or unknown-model messages do not already map to `limit`, `auth` and `model`,
+   add them to `mmo_classify.py`. Add a test with a fake CLI (see `test-mmo-lanes-1.sh`).
+3. Add a row to `skills/orchestra/lanes.md` and a section under `docs/lanes/`.
 4. Run the benchmark on the new lane and attach the `results.tsv` to the PR.
+
+## Confirm a lane that was written from docs
+
+Most lanes are marked `docs-<version>` in `mmo-run --list`: nobody has seen them answer. If you have the
+CLI, run a one-line read-only brief and a small write in a worktree, and open an issue or PR with the
+header lines (the first line of each output file) and, if it failed, the last stderr lines with anything
+private removed. Changing `LANE_VERIFIED` to the date is a welcome one-line PR.
 
 ## Tests
 
 ```bash
-bash skills/orchestra/scripts/test-mmo-classify.sh
-python -m pytest skills/otomode/scripts -q
-bash -n skills/orchestra/scripts/mmo-run bench/run.sh install.sh
+for t in classify run check lessons lanes-1 lanes-2 api cloud roster lanes-3 score advise usage tiers; do bash skills/orchestra/scripts/test-mmo-$t.sh; done
+bash bench/test-run-parse.sh
+bash bench/test-grade.sh
+python -m pytest skills/otomode/scripts skills/orchestra/scripts/test_mmo_model_guard.py skills/orchestra/scripts/test_mmo_limit.py -q
+python -m py_compile skills/orchestra/scripts/mmo_loop.py
+for f in skills/orchestra/scripts/mmo-* skills/orchestra/scripts/test-mmo-*.sh skills/orchestra/scripts/providers/*.sh bench/run.sh bench/test-run-parse.sh bench/test-grade.sh install.sh; do bash -n "$f"; done
 ```
 
 None of these call a model. CI runs the same commands.

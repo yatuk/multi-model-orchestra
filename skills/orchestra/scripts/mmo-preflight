@@ -2,8 +2,9 @@
 # mmo-preflight: offline readiness check. Never signs in, never calls a model.
 # Shows which lanes can run on this machine, so the orchestrator routes only to those.
 set -u
-ok=0; warn=0
-row() { printf '  %-10s %-6s %s\n' "$1" "$2" "$3"; }
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ok=0
+row() { printf '  %-10s %-8s %s\n' "$1" "$2" "$3"; }
 
 echo "multi-model-orchestra preflight (offline)"
 for bin in git timeout; do
@@ -12,17 +13,13 @@ done
 if command -v python3 >/dev/null || command -v python >/dev/null; then row python ok "$( (python3 --version || python --version) 2>&1 | head -1)"
 else row python MISSING "required to read lane output"; ok=1; fi
 
-echo "lanes"
-v() { "$@" --version 2>/dev/null | head -1; }
-if command -v codex >/dev/null; then row codex ok "$(v codex)  (ChatGPT: chatgpt-lane)"; else row codex absent "install the Codex CLI and sign in with ChatGPT"; warn=1; fi
-if command -v kimi >/dev/null; then
-  row kimi ok "kimi $(v kimi)  (Kimi: kimi-lane)"
-  cfg="${KIMI_CONFIG:-$HOME/.kimi-code/config.toml}"
-  if [ -f "$cfg" ] && grep -q 'models\."deepseek/' "$cfg"; then row deepseek ok "configured in $cfg  (deepseek-lane)"
-  else row deepseek absent "add a deepseek/* model to Kimi Code's config.toml"; warn=1; fi
-else row kimi absent "install Kimi Code and sign in"; row deepseek absent "needs Kimi Code"; warn=1; fi
-if command -v claude >/dev/null; then row claude ok "$(v claude)"; else row claude absent "only needed outside Claude Code"; fi
+echo "lanes (ok = CLI found, setup = found but not configured, absent = not installed)"
+bash "$HERE/mmo-run" --list | sed 's/^/  /'
+ready="$(bash "$HERE/mmo-run" --list | awk 'NR>1 && $2=="ok"' | wc -l | tr -d ' ')"
+echo "  CHECKED: a date means the lane was run on that day; docs-<version> means it was written from"
+echo "  the documentation of that version and never run. Installed does not mean signed in: send a"
+echo "  one-line read-only brief through mmo-run before routing real work to a lane."
 
 [ $ok -ne 0 ] && { echo "result: NOT READY (missing a required tool)"; exit 1; }
-[ $warn -ne 0 ] && { echo "result: READY with missing lanes (route around them)"; exit 0; }
-echo "result: READY"
+[ "$ready" -eq 0 ] && { echo "result: READY, but no external lane is installed (sub-agents still work)"; exit 0; }
+echo "result: READY, $ready lane(s) installed"

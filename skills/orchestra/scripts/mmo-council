@@ -7,7 +7,8 @@
 #
 # Default panel: codex:gpt-6-astra  kimi:kimi-code/k3.1-pro  deepseek:deepseek/deepseek-v4-pro
 # Writes DIR/answer-A.md, answer-B.md, ... (shuffled, no model names inside),
-# DIR/key.txt (which letter is which model; read it only after judging) and DIR/status.txt.
+# DIR/key.txt (which letter is which model; read it only after judging), DIR/status.txt and
+# DIR/order-reversed.txt (the order for a second reading).
 # A failed or timed-out lane is reported as failed. It is never counted as agreement.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,6 +34,7 @@ for i in "${!LANES[@]}"; do
   "$HERE/mmo-run" "$prov" -m "$model" -e high --mode ro -C "$WD" -t "$T" \
     --brief "$Q" --out "$OUTDIR/.raw/$i.md" 2>>"$OUTDIR/.raw/log.txt" &
   pids+=($!)
+  sleep 1   # two lanes on one CLI started in the same second can trip over its session storage
 done
 codes=()
 for p in "${pids[@]}"; do wait "$p"; codes+=($?); done
@@ -54,5 +56,14 @@ for k in "${!order[@]}"; do
     echo "$L FAILED (${st:-error}) - not an answer, not a vote" >> "$OUTDIR/status.txt"
   fi
 done
+# Second reading order for the judge: the answer read first gets a head start.
+: > "$OUTDIR/order-reversed.txt"
+for ((k=${#order[@]}-1; k>=0; k--)); do
+  [ -f "$OUTDIR/answer-${letters[$k]}.md" ] && echo "answer-${letters[$k]}.md" >> "$OUTDIR/order-reversed.txt"
+done
+if [ -n "${MMO_LOG:-}" ]; then
+  printf '{"ts":"%s","kind":"council","lanes":%s,"answered":%s,"task":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${#LANES[@]}" "$okn" "${MMO_TASK:-}" >> "$MMO_LOG"
+fi
 echo "mmo-council: $okn of ${#LANES[@]} panelists answered; see $OUTDIR/status.txt" >&2
 [ $okn -gt 0 ] || exit 3

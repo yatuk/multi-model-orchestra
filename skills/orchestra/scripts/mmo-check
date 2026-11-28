@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# mmo-check: the conductor's own check of a writing lane. Runs the task's check command in the
+# lane's worktree and looks at what the lane touched, so "DONE" is never taken on trust.
+#
+#   mmo-check -C WORKTREE --cmd "CHECK COMMAND" [--out FILE] [--base REF] [-t SECONDS]
+#             [--allow GLOB]... [--protect GLOB]... [--red] [--tests GLOB]...
+#
+#   --cmd      the check; its exit code decides. It runs through bash in the worktree.
+#   --base     compare against the merge base with REF (default: the worktree's HEAD, which is
+#              right for lanes that do not commit).
+#   --allow    files the lane may touch (repeatable). Anything else it touched is reported.
+#   --protect  files the lane must not touch at all (repeatable), e.g. "tests/*" when the
+#              tests are the spec. A touched protected file fails the check.
+#   --red      red before green: also run the check on the base code plus only the new or
+#              changed test files. It must FAIL there. A check that passes without the change
+#              proves nothing about the change. (The base copy has no installed dependencies or
+#              build output unless the command creates them: read the red log before trusting it.)
+#   --tests    which changed files count as tests for --red (default: common test file names).
+#
+# First line of the report:
+#   <!-- mmo-check status=pass exit=0 seconds=12 changed=3 outside=0 protected=0 tests_changed=1 deps_changed=0 -->
+# Exit codes: 0 pass | 1 fail (the check failed) | 2 usage | 3 policy (outside or protected files)
+#             4 timeout | 5 not-red (the check passes without the change)
+set -uo pipefail
+die() { echo "mmo-check: $*" >&2; exit 2; }
+
+WT=""; CMD=""; BASE=""; OUT=""; T=900; RED=0; ALLOW=(); PROTECT=(); TESTS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -C) WT="$2"; shift 2 ;;
+    --cmd) CMD="$2"; shift 2 ;;
+    --base) BASE="$2"; shift 2 ;;
+    --out) OUT="$2"; shift 2 ;;
+    -t) T="$2"; shift 2 ;;
+    --allow) ALLOW+=("$2"); shift 2 ;;
+    --protect) PROTECT+=("$2"); shift 2 ;;
+    --tests) TESTS+=("$2"); shift 2 ;;
+    --red) RED=1; shift ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+[ -n "$WT" ] && [ -d "$WT" ] || die "-C must name the worktree to check"
+[ -n "$CMD" ] || die "--cmd is required"
+git -C "$WT" rev-parse --git-dir >/dev/null 2>&1 || die "$WT is not a git checkout"
+if [ -n "$BASE" ]; then MB="$(git -C "$WT" merge-base "$BASE" HEAD 2>/dev/null)" || die "no merge base with $BASE"
+else MB="$(git -C "$WT" rev-parse HEAD)"; fi
+
+TMP="$(mktemp -d)"
+trap 'git -C "$WT" worktree remove --force "$TMP/red" 2>/dev/null; rm -rf "$TMP"' EXIT
+LOG="$TMP/green.log"; REDLOG="$TMP/red.log"
+
+matches() {
+  local f="$1" g; shift
+  for g in "$@"; do
+    # shellcheck disable=SC2254
+    case "$f" in $g) return 0 ;; esac
+  done
+  return 1
+}
+TEST_RE='(^|/)(tests?|__tests__|specs?)/|(_test|_spec|\.test|\.spec)\.[A-Za-z]+$|(^|/)test_[^/]*\.py$|Tests?\.(java|cs|kt)$'
+is_test() {
+  if [ ${#TESTS[@]} -gt 0 ]; then matches "$1" "${TESTS[@]}"; return; fi
+  [[ "$1" =~ $TEST_RE ]]
+}
+is_manifest() {
+  case "${1##*/}" in
+    package.json|package-lock.json|pnpm-lock.yaml|yarn.lock|go.mod|go.sum|Cargo.toml|Cargo.lock) return 0 ;;
+    pyproject.toml|poetry.lock|uv.lock|Pipfile|Pipfile.lock|requirements*.txt) return 0 ;;
+    pom.xml|build.gradle|build.gradle.kts|Gemfile|Gemfile.lock|composer.json) return 0 ;;
+  esac
+  return 1
+}
+
+# What the lane touched: tracked changes since the base, plus new untracked files.
+mapfile -t CHANGED < <( { git -C "$WT" diff --name-only "$MB" 2>/dev/null
+                          git -C "$WT" ls-files --others --exclude-standard 2>/dev/null; } | tr -d '\r' | sort -u )
+OUTSIDE=(); PROT=(); TCH=(); DEPS=()
+for f in "${CHANGED[@]}"; do
+  [ -n "$f" ] || continue
+  if [ ${#ALLOW[@]} -gt 0 ] && ! matches "$f" "${ALLOW[@]}"; then OUTSIDE+=("$f"); fi
+  if [ ${#PROTECT[@]} -gt 0 ] && matches "$f" "${PROTECT[@]}"; then PROT+=("$f"); fi
+  if is_test "$f"; then TCH+=("$f"); fi
+  if is_manifest "$f"; then DEPS+=("$f"); fi
+done
+# Existing tests the lane changed or deleted (new test files are fine; weakened ones are not).
+TWEAK=()
+while IFS=$'\t' read -r st f _; do
+  [ -n "${f:-}" ] || continue
+  case "$st" in A*) continue ;; esac
+  if is_test "$f"; then TWEAK+=("$st $f"); fi
+done < <(git -C "$WT" diff --name-status "$MB" 2>/dev/null | tr -d '\r')
+
+start=$(date +%s)
+( cd "$WT" && timeout -k 10 "$T" bash -c "$CMD" ) < /dev/null > "$LOG" 2>&1; green=$?
+
+red=""
+if [ $RED -eq 1 ] && [ $green -eq 0 ]; then
+  if git -C "$WT" worktree add -q --detach "$TMP/red" "$MB" 2> "$REDLOG"; then
+    for f in "${TCH[@]}"; do
+      [ -f "$WT/$f" ] || continue
+      mkdir -p "$TMP/red/$(dirname "$f")" && cp "$WT/$f" "$TMP/red/$f"
+    done
+    ( cd "$TMP/red" && timeout -k 10 "$T" bash -c "$CMD" ) < /dev/null > "$REDLOG" 2>&1; red=$?
+    git -C "$WT" worktree remove --force "$TMP/red" 2>/dev/null
+  else
+    red=skipped
+  fi
+fi
+secs=$(( $(date +%s) - start ))
+
+status=pass; rc=0
+if [ $green -eq 124 ] || [ $green -eq 137 ]; then status=timeout; rc=4
+elif [ $green -ne 0 ]; then status=fail; rc=1
+elif [ ${#PROT[@]} -gt 0 ] || [ ${#OUTSIDE[@]} -gt 0 ]; then status=policy; rc=3
+elif [ "$red" = 0 ]; then status=not-red; rc=5
+fi
+
+list() { # title, items...
+  [ $# -gt 1 ] || return 0
+  echo "$1"; shift; printf '  %s\n' "$@"
+}
+report() {
+  echo "<!-- mmo-check status=$status exit=$green seconds=$secs changed=${#CHANGED[@]} outside=${#OUTSIDE[@]} protected=${#PROT[@]} tests_changed=${#TWEAK[@]} deps_changed=${#DEPS[@]}${red:+ red_exit=$red} -->"
+  echo "check: $CMD"
+  list "PROTECTED files touched (reject):" "${PROT[@]}"
+  list "Files outside the allowed list (reject or justify):" "${OUTSIDE[@]}"
+  list "Existing tests changed or deleted (read these hunks first):" "${TWEAK[@]}"
+  list "Dependency manifests changed:" "${DEPS[@]}"
+  if [ "$red" = 0 ]; then echo "NOT RED: the check also passes on the base code with the new tests. It does not test this change."; fi
+  if [ "$red" = skipped ]; then echo "red run skipped: could not create the base worktree"; fi
+  list "Changed files:" "${CHANGED[@]}"
+  echo "--- last lines of the check output"
+  tail -n 40 "$LOG"
+  if [ -n "$red" ] && [ "$red" != 0 ] && [ "$red" != skipped ]; then
+    echo "--- last lines of the red run (base code; it should fail for lack of the change, not for lack of a tool)"
+    tail -n 15 "$REDLOG"
+  fi
+}
+if [ -n "${MMO_LOG:-}" ]; then
+  mkdir -p "$(dirname "$MMO_LOG")" 2>/dev/null
+  printf '{"ts":"%s","kind":"check","status":"%s","seconds":%s,"task":"%s"}
+'     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" "$secs" "${MMO_TASK:-}" >> "$MMO_LOG"
+fi
+if [ -n "$OUT" ]; then mkdir -p "$(dirname "$OUT")"; report > "$OUT"; else report; fi
+echo "mmo-check: $status (exit $green) in ${secs}s${OUT:+ ($OUT)}" >&2
+exit $rc

@@ -1,0 +1,48 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..a0543c0 100644
+--- a/durations.py
++++ b/durations.py
+@@ -14,14 +14,37 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not isinstance(text, str):
++        raise ValueError(f"duration must be a string, got {type(text).__name__}")
++
++    order = {"h": 0, "m": 1, "s": 2}  # rule 2: h before m before s
+     total = 0
+-    num = ""
++    value = 0
++    have_digits = False
++    seen_any = False
++    last_order = -1
++
+     for ch in text:
+-        if ch.isdigit():
+-            num += ch
++        if "0" <= ch <= "9":  # ASCII digits only (rule 5)
++            value = value * 10 + (ord(ch) - ord("0"))
++            have_digits = True
+         elif ch in UNITS:
+-            total += int(num or 0) * UNITS[ch]
+-            num = ""
+-        else:
++            if not have_digits:  # every unit needs a number
++                raise ValueError(f"unit {ch!r} without a number")
++            pos = order[ch]
++            if pos <= last_order:  # rules 1 & 2: once, in h/m/s order
++                raise ValueError(f"unit {ch!r} repeated or out of order")
++            total += value * UNITS[ch]
++            value = 0
++            have_digits = False
++            last_order = pos
++            seen_any = True
++        else:  # rule 5: spaces, other letters, signs, anything else
+             raise ValueError(f"bad character {ch!r}")
++
++    if have_digits:  # rule 3: every number must be followed by a unit
++        raise ValueError("number not followed by a unit")
++    if not seen_any:  # rule 4: empty string is invalid
++        raise ValueError("empty duration")
++
+     return total

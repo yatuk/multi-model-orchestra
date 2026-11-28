@@ -1,0 +1,25 @@
+# Models for lanes that have no default model. Copy to ~/.config/mmo/models (or point MMO_MODELS at
+# a copy) and `mmo-roster probe` reads it. One `lane model` per line; several lines for one lane are
+# each probed; `#` starts a comment. Use ids your own CLI or account accepts: these are examples.
+#
+# opencode: ids come from `opencode models`
+# opencode opencode/big-pickle
+# opencode openrouter/deepseek/deepseek-chat
+#
+# api: `endpoint:model` (keys for the endpoint go in ~/.config/mmo/keys.env, see docs/lanes/api.md)
+# api openrouter:meta-llama/llama-3.3-70b-instruct:free
+# api ollama:qwen3:8b
+#
+# cursor: ids from `cursor-agent --list-models`
+# cursor composer-2.5
+#
+# agy: ids from the model picker of the Antigravity CLI
+# agy gemini-4-neon-high
+# agy gemini-4-hydrogen-high
+#
+# copilot: ids from `copilot --help` or your plan
+# copilot gpt-6.1-sol
+#
+# A lane that already has a default (codex, grok, deepseek, kimi) can also be listed to probe more ids:
+# codex gpt-6-astra
+# grok grok-4.7-build-fast

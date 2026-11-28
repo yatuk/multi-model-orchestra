@@ -1,0 +1,21 @@
+diff -ru a/roombook/store/migrate.py b/roombook/store/migrate.py
+--- a/roombook/store/migrate.py	2026-11-28 16:09:38.659962800 +0300
++++ b/roombook/store/migrate.py	2026-11-28 16:09:38.719483000 +0300
+@@ -9,7 +9,7 @@
+ time, each step in its own transaction, so a failed step leaves the previous version.
+ """
+ 
+-CURRENT = 3
++CURRENT = 2
+ 
+ SCHEMA = """
+ CREATE TABLE rooms (
+@@ -95,7 +95,7 @@
+             conn.execute("UPDATE bookings SET starts_at = ?, ends_at = ? WHERE id = ?", (s, e, r[0]))
+ 
+ 
+-STEPS = {1: _v1_to_v2, 2: _v2_to_v3}
++STEPS = {1: _v1_to_v2}
+ 
+ 
+ def upgrade(conn):

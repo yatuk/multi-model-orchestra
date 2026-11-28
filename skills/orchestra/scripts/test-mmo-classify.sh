@@ -29,6 +29,17 @@ check "kimi/deepseek empty balance" limit deepseek "$T/brief" "$T/e5"
 
 printf 'unknown model: deepseek/nope\n' > "$T/e6"
 check "unknown model (kimi)" model kimi "$T/brief" "$T/e6"
+printf 'error: invalid model selection (--model "x"): model x is not recognized as a known model or custom model in settings
+' > "$T/e6b"
+check "unknown model (agy)" model agy "$T/brief" "$T/e6b"
+
+printf 'qwen lane error: No auth type is selected. Please configure an auth type (e.g. via settings or --auth-type)
+' > "$T/e7"
+check "qwen signed out (real text)" auth qwen "$T/brief" "$T/e7"
+
+printf 'Execution failed: Model "no-such-model-xyz" is not available.
+' > "$T/e8"
+check "copilot unknown model (real text)" model copilot "$T/brief" "$T/e8"
 
 # End to end with a fake codex on PATH: brief mentions 429, CLI fails with model_not_found / succeeds.
 mkdir -p "$T/bin"

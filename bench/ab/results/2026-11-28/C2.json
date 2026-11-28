@@ -1,0 +1,91 @@
+{
+  "arm": "C",
+  "run": 2,
+  "is_error": false,
+  "stop_reason": "end_turn",
+  "subtype": "success",
+  "total_cost_usd": 1.2230771,
+  "wall_s": 147,
+  "exit": 0,
+  "duration_ms": 40728,
+  "num_turns": 7,
+  "usage_main": {
+    "input_tokens": 6,
+    "output_tokens": 4339,
+    "cache_creation_input_tokens": 8781,
+    "cache_read_input_tokens": 163697
+  },
+  "modelUsage": {
+    "claude-fable-5-2": {
+      "inputTokens": 20,
+      "outputTokens": 9571,
+      "cacheReadInputTokens": 456104,
+      "cacheCreationInputTokens": 30906,
+      "webSearchRequests": 0,
+      "costUSD": 0.9687168,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 2137,
+      "cacheCreationEphemeral5mInputTokens": 0,
+      "cacheCreationEphemeral1hInputTokens": 30906,
+      "canonicalModel": "claude-fable-5-2",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5-5": {
+      "inputTokens": 24,
+      "outputTokens": 13321,
+      "cacheReadInputTokens": 416398,
+      "cacheCreationInputTokens": 31785,
+      "webSearchRequests": 0,
+      "costUSD": 0.2543603,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 2319,
+      "cacheCreationEphemeral5mInputTokens": 31785,
+      "cacheCreationEphemeral1hInputTokens": 0,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "subagent_stats": {
+    "spawned": 2,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 2
+    },
+    "started_in_background": 2,
+    "max_depth": 1,
+    "spawned_by_subagents": 0,
+    "completed": 2,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {
+      "general-purpose": 2
+    }
+  },
+  "permission_denials": [],
+  "final_message": "All four tasks are done, and `python -m unittest` passes (16 tests, including the new ones). Nothing is committed and the existing test files are untouched.\n\nTwo Sonnet subagents did the implementation (one for tasks 1\u20133, one for task 4). I reviewed their code and ran about 80 extra edge-case checks against the rules in `TASKS.md`, all of which passed. My only direct edit was moving two imports to the top of `query.py`.\n\n- **Task 1, `intervals.py`:** `merge()` now follows all seven docstring rules.\n- **Task 2, `cache.py`:** `LRUCache(capacity, ttl=None, clock=None)` implements the TTL rules as written. A `put` clears every expired entry before it considers evicting the least recently used live one.\n- **Task 3, `report.py`:** `group_totals`, `rank` and `format_cents` are module-level helpers, and `summarize()` is 8 lines using all three. The new `test_report_parts.py` has four tests.\n- **Task 4, `query.py`:** `parse` and `matches` are implemented with a tokenizer and a recursive-descent parser. All six error-position examples from the spec give the stated positions.\n\nThe spec leaves a few points in task 4 open, and hidden tests could disagree with the choices made:\n\n- **Bad escapes:** a backslash followed by anything other than `\"` or `\\` is a `ParseError` at the string's opening quote.\n- **Booleans:** two booleans compare with `=` and `!=` only; `<`, `<=`, `>`, `>=` between booleans are False.\n- **Null:** ordering operators against `null` are always False. A field holding None compared with a non-null literal is False for every operator, including `!=`.\n- **Keywords as fields:** a bare keyword such as `and = 1` is an error, but a dotted name such as `and.x` is accepted as a field.\n- **Very deep nesting:** this raises `ParseError` rather than `RecursionError`.",
+  "grade": {
+    "tasks": {
+      "intervals (bugfix)": "8/8",
+      "cache (feature)": "8/8",
+      "report (refactor)": "6/6",
+      "query (parser)": "14/14"
+    },
+    "visible_tests_intact": true,
+    "visible": "12/12",
+    "hidden_total": "36/36"
+  }
+}

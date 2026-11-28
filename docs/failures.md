@@ -1,0 +1,30 @@
+# Failures seen, and what fixed them
+
+[Back to the README](../README.md)
+
+Real failures from running the lanes, one row each: what you see, why, what to do. If you hit one that is not
+here, the header line and the last stderr lines (with anything private removed) are enough for an issue.
+
+| What you see | Why | What to do |
+|---|---|---|
+| `status=limit` from `codex`, with "You've hit your usage limit ... try again at <date>" | The ChatGPT plan's Codex allowance is used up until that date | Route to another lane of the same tier. Waiting inside a run does not help |
+| `status=limit` from `kimi`, with "403 Your current subscription does not have access to Kimi Code" | The plan lapsed or does not include Kimi Code | Same. The DeepSeek lane through the same CLI keeps working if it has credit |
+| A lane shows `limit until <date time>` in `mmo-roster show` or `lineup`, and a probe makes no call to it | The last run was `limit` and the message said when it comes back (`try again at Dec 21st, 2026 9:18 AM`, `resets 4pm (Europe/Istanbul)`, or a `Retry-After` of seconds from the api lane); the roster remembers that time | Route to another lane of the same tier. After the time has passed the next `mmo-roster probe` tries the lane again. A message with no recognisable time is not remembered, so that lane is probed every time |
+| `status=model`, "model_not_found" or "unknown model id" | The id is not served to this account, or the default in the adapter is older than the CLI | List the ids the CLI accepts (`grok models`, `opencode models`, ...) and pass one with `-m` |
+| `status=failed` from `grok`, "426 Upgrade Required ... CLI version is outdated" | The vendor refuses old CLI versions | `grok update`. The lane's flags did not change between 0.2 and 1.0 |
+| `status=auth`, the CLI prints a sign-in URL and "Waiting for authorization" | Not signed in; in print mode the CLI starts a device login and then gives up | Sign in once in a terminal (`grok login`, `cursor-agent login`, `codex login`). The runner never signs in for you |
+| `status=failed`, "storage write failed: permission denied" from `kimi` or `deepseek` | Two lanes on the same CLI started in the same second and collided on its session storage | Start them a second apart. `mmo-council` does this; a retry also works |
+| `status=failed` from `opencode`, "Upstream request failed: Model is unavailable" | A free or preview model was withdrawn or is down | Pick another model. Free models come and go without notice |
+| `cursor` lane runs the wrong program, or `cursor-agent` is "not found" in Git Bash | Cursor's binary is now `agent`, a name the Grok CLI also installs; on Windows the real one is a `.cmd` that Git Bash does not start by bare name | The lane calls `cursor-agent`. On Windows put a one-line shell wrapper named `cursor-agent` on PATH that runs the `.cmd` |
+| `opencode` is `absent` in `--list` although the desktop app is installed | The app ships the CLI inside its own folder, not on PATH | Put a wrapper named `opencode` on PATH that runs the bundled `opencode-cli` |
+| `status=ok` but the answer is empty lines and then text | Some endpoints start the reply with blank lines | Nothing: read past them. An answer that is only whitespace is `status=empty` |
+| `ro_violation=yes` on a read-only lane | The CLI wrote files although told not to; it has no read-only mode | Nothing was kept: the run was in a throwaway worktree. Do not give that lane `--allow-main` |
+| `status=base`, exit 9 | The worktree does not contain the branch given to `--base` | Recreate the worktree from your branch. Sub-agent worktrees can start from the default branch |
+| `mmo-check` says NOT RED | The check passes on the base code with the new tests: it does not test the change | Treat the task as not done. Ask for a test that fails without the change |
+| `mmo-check --red` fails on the base for the wrong reason (module not found) | The base copy has no installed dependencies or build output | Read the red log. Make the check command install or build what it needs, or skip `--red` for that task |
+| Every task green, the full run red | Two correct changes broke each other, or a repo-wide rule is in no task's check | Run the full check after every few merges; the culprit is then one of a handful of commits |
+| An unattended run drifts to Claude lanes only, although other lanes are installed | The start round smoke-tested one or two lanes and dropped a lane that did not answer without saying why; the plan's lane line listed only `sonnet, opus`; the loop named DeepSeek as the only external lane, only for easy work and only if the user said yes; a `limit` moved the rest of the run to Claude; and retries escalated through Claude models only | `mmo-roster probe` at the start, the lineup on the `Lanes:` line, the first ready lane of the task's tier (external first), a limit takes out only that lane, escalation by tier, and a re-probe after a resume or when the roster is stale |
+| A lane reports FAILED, but its diff is correct | The lane's write mode can edit files but cannot run commands, so it could not run the task's check (this was the `claude` lane until its write mode offered Bash) | `mmo-roster probe --write` shows it (can_run false). What counts is your own `mmo-check` on the worktree, not the lane's last line |
+| The otomode hook denied a command although its tool is allowed (`allowlist_gap`; for example `mmo-check ...; echo exit=$?` or a `for` loop) | Claude Code needs every segment of a compound command (`a; b`, `a && b`, pipes, loop bodies) allowed, and one segment (here `echo`) had no rule | Run one simple command per call and read the out file header instead of `; echo`, or add a rule per segment (the hook now suggests one per segment) |
+| A lane reports a problem that is already fixed | It worked on stale code | `--base`, as above |
+| `bench/tasks/bulk` shows as modified after a benchmark on Windows | The task generator rewrote the files with other line endings | `git checkout -- bench/tasks/bulk` |

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# mmo-cloud: hand a brief to an asynchronous cloud coding agent and get back a PR or branch.
+# EXPERIMENTAL: written from vendor docs, never run against real accounts (docs/lanes/cloud.md).
+#
+#   mmo-cloud list                                  which agents have their keys set (offline)
+#   mmo-cloud start <agent> --brief FILE --repo OWNER/NAME [--base BRANCH] [--cap N] --state FILE
+#   mmo-cloud status --state FILE                   one poll, one header line
+#   mmo-cloud wait   --state FILE -t SECONDS [--every SECONDS]   poll until terminal or timeout
+#   mmo-cloud result --state FILE                   PR URL and branch, if any; never merges
+#   mmo-cloud cancel --state FILE                   only where the vendor documents a cancel
+#
+#   agents: devin (needs --cap, ACU), cursor, copilot (no cap: start says so)
+#   The repo and branch must already be pushed where the vendor can reach them. Pushing is the
+#   user's call, never the conductor's.
+#
+# Every command prints one header line first:
+#   <!-- mmo-cloud agent=devin status=running id=devin-... vendor=running/working -->
+# status is one of: started queued running waiting done failed limit auth cancelled expired timeout
+# waiting means the agent asked a question: for an unattended conductor that is a stop.
+#
+# Exit codes: 0 ok (or still queued/running for status) | 2 usage | 3 failed, cancelled or expired
+#             4 timeout (wait only; the remote run keeps going) | 5 no PR or branch yet (result)
+#             6 limit or no credit | 7 auth or missing key | 10 waiting for a person
+# Keys come from environment variables only and are never printed or written to the state file.
+# Base URLs can be pointed elsewhere (tests): MMO_DEVIN_BASE, MMO_CURSOR_BASE, MMO_COPILOT_BASE.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python || true)"
+[ -n "$PY" ] || { echo "mmo-cloud: python3 (or python) is required" >&2; exit 2; }
+exec "$PY" "$HERE/mmo_cloud.py" "$@"

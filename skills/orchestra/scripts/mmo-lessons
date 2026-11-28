@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# mmo-lessons: a capped log of one-sentence lessons that can only be written with a passing mmo-check report.
+#   mmo-lessons add --lane LANE --text "..." --check REPORT [--supersedes ID]
+#   mmo-lessons show --lane LANE [-n N]     (output is pasted into a brief)
+#   mmo-lessons list [--all]
+#   mmo-lessons drop ID
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python)" || { echo "mmo-lessons: python is required" >&2; exit 2; }
+exec "$PY" "$HERE/mmo_lessons.py" "$@"

@@ -1,0 +1,47 @@
+diff --git a/durations.py b/durations.py
+index 8ec0096..f2db583 100644
+--- a/durations.py
++++ b/durations.py
+@@ -1,6 +1,7 @@
+ """Duration parsing used by the scheduler."""
+ 
+ UNITS = {"h": 3600, "m": 60, "s": 1}
++_UNIT_ORDER = {"h": 0, "m": 1, "s": 2}
+ 
+ 
+ def parse_duration(text):
+@@ -14,14 +15,32 @@ def parse_duration(text):
+     5. Anything else (spaces, other letters, signs) is invalid.
+     Invalid input raises ValueError.
+     """
++    if not text:
++        raise ValueError("empty string")
++
+     total = 0
+     num = ""
++    seen_units = set()
++    max_order = -1
++
+     for ch in text:
+         if ch.isdigit():
+             num += ch
+         elif ch in UNITS:
++            if ch in seen_units:
++                raise ValueError(f"unit {ch!r} appears more than once")
++            seen_units.add(ch)
++            order = _UNIT_ORDER[ch]
++            if order <= max_order:
++                raise ValueError(f"unit {ch!r} out of order")
++            max_order = order
+             total += int(num or 0) * UNITS[ch]
+             num = ""
+         else:
+             raise ValueError(f"bad character {ch!r}")
+-    return total
++
++    # Rule 3: every number must be followed by a unit
++    if num:
++        raise ValueError("number not followed by a unit")
++
++    return total
+\ No newline at end of file

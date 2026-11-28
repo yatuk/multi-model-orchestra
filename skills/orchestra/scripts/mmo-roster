@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# mmo-roster: which lanes really answer on this machine now, and for which tier.
+#
+#   mmo-roster probe  [--out FILE] [--lanes a,b,...] [--models FILE] [-t SECONDS] [--max-age HOURS] [--write [--write-timeout S]]
+#   mmo-roster show   [--file FILE] [--max-age HOURS]      exit 3: missing or older than HOURS (12)
+#   mmo-roster ready  --tier strong|middle|cheap|bulk|opinion [--for write] [--file FILE]   best first, one per line
+#   mmo-roster lineup [--file FILE]                         a short block to tell the user
+#
+# probe sends one tiny read-only brief ("Reply with exactly the word PONG ...") through mmo-run to
+# every lane that --list shows as ok, at most 4 at a time, a second apart, once each (no retries).
+# --write: a second stage for lanes that answered and have tools: one rw brief in a throwaway worktree
+# (probe.txt from `echo`, ver.txt from `python --version`), judged from the files. The roster gets
+# can_write / can_run; `ready --for write` skips can_run=false; lineup says "cannot run commands".
+# One call per lane, --write-timeout (default 180) seconds, no retries.
+# --models names a file of `lane model` lines: lanes without a default model are probed only with
+# one from it (otherwise needs-model). Without --models, probe reads $MMO_MODELS, else
+# ~/.config/mmo/models, if that file exists (lines `lane model`, # comments, several per lane).
+# See skills/orchestra/models.example. --max-age on probe reuses a roster younger than that.
+# The roster goes to .mmo/roster.json under the current directory unless --out/--file say otherwise.
+# MMO_RUN overrides the runner (tests use a copy with fake providers).
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="$(command -v python3 || command -v python)" || { echo "mmo-roster: python is required" >&2; exit 2; }
+# Windows Python would find WSL's bash.exe by name; hand it the bash that runs this script.
+MMO_BASH="$BASH"; command -v cygpath >/dev/null 2>&1 && MMO_BASH="$(cygpath -w "$BASH")"
+export MMO_BASH
+exec "$PY" "$HERE/mmo_roster.py" "$@"
