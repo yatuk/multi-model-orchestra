@@ -20,16 +20,19 @@ LIMIT = re.compile(
     r"insufficient balance|\b402\b|quota|usage limit|rate.?limit|\b429\b|exceeded your|"
     r"does not have access|upgrade to", re.I)
 AUTH = re.compile(
-    r"authenticat|not logged in|log in|sign in|unauthorized|\b401\b|session expired|no api key", re.I)
+    r"authenticat|not logged in|log in|sign in|unauthorized|\b401\b|session expired|no api key|"
+    r"api key (?:is )?(?:invalid|expired|missing)", re.I)
 # A CLI that starts a sign-in flow is not signed in, whatever else it prints afterwards.
 SIGN_IN = re.compile(
     r"waiting for authorization|you are not authenticated|to sign in, open|open this url in your browser|"
     r"please run .{0,40}login|run `?\S+ (auth )?login`?", re.I)
 # Strings quoted from the docs or source of gemini, crush, aider and opencode (no sign-in word in them).
+# Checked before MODEL and LIMIT, so only messages that can mean nothing else belong here; a looser
+# phrase such as "api key is missing" goes in AUTH, which is checked last.
 EXTRA_AUTH = re.compile(
     r"please set an auth method|no providers configured|unable to proceed without an? .{0,30}api key|"
     r"is required to resolve the provider endpoint|no auth type is selected|"
-    r"invalid[_ ]api[_ ]key|invalid x-api-key|api key (?:is )?(?:invalid|expired|missing)", re.I)
+    r"invalid[_ ]api[_ ]key|invalid x-api-key", re.I)
 EXTRA_LIMIT = re.compile(
     r"exhausted your capacity|capacity exceeded|model_capacity_exhausted|"
     r"not included in your (weekly )?usage|credit balance is too low|resource_exhausted", re.I)

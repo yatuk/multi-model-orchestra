@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Classifier.** "Model is unavailable" is `model`; Anthropic's "credit balance is too low" and Gemini's
+  `RESOURCE_EXHAUSTED` are `limit`; `invalid_api_key`, `invalid x-api-key` and "api key is invalid, expired or
+  missing" are `auth` (#13, thanks to @techkayacodes).
+
+### Changed
+
+- The loose phrase "api key is invalid, expired or missing" is checked after the model and limit patterns, so a
+  message that is really about a model or a quota and merely mentions the key keeps its class.
+
 ## [1.1.0] - 2026-11-28
 
 Much of this came from the comments on the Reddit posts about the first release: pin the base of every

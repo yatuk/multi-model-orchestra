@@ -57,6 +57,17 @@ printf 'Error: invalid_api_key provided for provider
 ' > "$T/e12"
 check "invalid_api_key auth error" auth codex "$T/brief" "$T/e12"
 
+# A looser key phrase must not win over a message that is really about the model or the quota.
+printf 'HTTP 404 x: The model foo does not exist or your API key is missing access
+' > "$T/e13"
+check "model error that also mentions the key" model api "$T/brief" "$T/e13"
+printf 'HTTP 429 x: Rate limit exceeded; API key is invalid for higher tier
+' > "$T/e14"
+check "rate limit that also mentions the key" limit api "$T/brief" "$T/e14"
+printf 'Error: the API key is expired
+' > "$T/e15"
+check "expired key alone is auth" auth grok "$T/brief" "$T/e15"
+
 # End to end with a fake codex on PATH: brief mentions 429, CLI fails with model_not_found / succeeds.
 mkdir -p "$T/bin"
 cat > "$T/bin/codex" <<'FAKE'
